@@ -1,3 +1,4 @@
-files.*
-translate.*
+files/*
+translate/*
 token.json
+!.gitignore
