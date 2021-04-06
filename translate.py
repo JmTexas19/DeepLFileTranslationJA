@@ -2,7 +2,10 @@ import re
 import os
 import requests
 import time
+import json
 from pathlib import Path
+
+token = json.load(open('token.json'))['token']
 
 #Regex
 pattern1 = re.compile(r'([一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～！？、…･・　」「”【】%\(\)\[\]0-9$]+)') #Main Matching Regex
@@ -10,7 +13,7 @@ pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～]+)') #Filter Matc
 
 #Translate Via DeepL
 def translate(text):
-    payload = {'auth_key':'de51ca71-bb2c-cd05-fe93-a1ebe014cd56', 'source_lang':'JA', 'target_lang':'EN-US', 'tag_handling':'xml', 'text':text}
+    payload = {'auth_key': token, 'source_lang':'JA', 'target_lang':'EN-US', 'tag_handling':'xml', 'text':text}
     r = requests.get('https://api.deepl.com/v2/translate', params=payload)
     return r.json()['translations'][0]['text']
 
