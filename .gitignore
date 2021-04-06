@@ -1,4 +1,4 @@
 files/*
 translate/*
 token.json
-!.gitignore
+!.gitkeep
