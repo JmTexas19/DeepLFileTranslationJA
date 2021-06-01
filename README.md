@@ -1,5 +1,5 @@
 # DeepLFileTranslationJA
-Used to translate Japanese text in files using DeepL without breaking formatting.
+Used to translate Japanese text in files using DeepL without breaking syntax.
 
 ## Instructions:
 1. Add files you want translated in `files`
