@@ -1,16 +1,16 @@
-import re
-import os
-import requests
-import time
-import json
-import concurrent.futures
+import re, os, requests, time, json, concurrent.futures
 from pathlib import Path
-
-token = json.load(open('token.json'))['token']
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from lxml import html
 
 #Regex
 pattern1 = re.compile(r'([一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～！？＋、<>…･・。♥　”゛【】%0-9A-Za-z\\\[\] ]+)') #Main Matching Regex
-pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～]+)') #Filter Matches with no Japanese Text
+pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤]+)') #Filter Matches with no Japanese Text
 pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[\\]+>)') #Filter for variables (e.g \\n[2])
 
 #Create Directory
@@ -18,7 +18,7 @@ Path("translate").mkdir(parents=True, exist_ok=True)
 
 #Give Options to choose type of translation
 choice = 0
-while not(choice == '1' or choice == '2'):
+while not(choice == '1' or choice == '2' or choice == '3'):
     choice = input('Choose Translation Type:\n[1] Translate only matches\n[2] Translate entire line\n')
 
 class textObject:
@@ -27,19 +27,37 @@ class textObject:
 
 #Translate Via DeepL
 def translate(text):
-    #Create new object
+    #Selenium
+    options = Options()
+    options.headless = True
+    driver = webdriver.Chrome('chromedriver.exe', options=options)
+
+    #Assign to new object
     tO = textObject()
     tO.text = text
 
+    #Get Page and Translate
+    tO = filterVariables(tO)
+    url = 'https://www.deepl.com/translator#ja/en/' + tO.text
+    driver.get(url)
+
+    #Wait until translation is finished loading
     try:
-        tO.text = filterVariables(tO).text
-        payload = {'auth_key': token, 'source_lang':'JA', 'target_lang':'EN-US', 'tag_handling':'xml', 'text':tO.text}
-        r = requests.get('https://api.deepl.com/v2/translate', params=payload)
-        tO.text = r.json()['translations'][0]['text']
-        return filterVariables(tO).text
-    except ValueError:
-        print(r.status_code)
-    
+        match = WebDriverWait(driver, 10).until(lambda driver: 
+            re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
+        )
+    except TimeoutException:
+        print('Failed to find translation')
+        time.sleep(10)
+        driver.close()
+        filterVariables(tO)
+
+    tO.text = match.group()
+    tO.text = tO.text.strip()
+    tO = filterVariables(tO)
+    driver.close()
+    return tO.text
+
 #Filter variables from string, then put back
 def filterVariables(tO):
     #1. Replace stars and placeholders and finish
@@ -56,10 +74,10 @@ def filterVariables(tO):
         return tO
 
     #2 No stars, replace placeholders.
-    if('^' in tO.text):
+    if('var' in tO.text):
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(str(i) + '^', var, 1)
+            tO.text = tO.text.replace(str(i) + 'var', var, 1)
             i += 1
 
         return tO
@@ -69,11 +87,11 @@ def filterVariables(tO):
         tO.variableList = re.findall(pattern3, tO.text)
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, str(i) + '^', 1)
+            tO.text = tO.text.replace(var, str(i) + 'var', 1)
             i += 1
 
         if('\\' in tO.text):
-            tO.text = tO.text.replace('\\', '*')
+            tO.text = tO.text.replace('\\', '')
 
         return tO
     
@@ -86,13 +104,18 @@ def filterVariables(tO):
     return tO
 
 def main():
+    if(choice == '3'):
+        translate('実際、この日まで\\n[10]は\"人間の男\"とはセックスどころか、')
+        quit()
+        
+
     # Open File
     for filename in os.listdir("files"):
         with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
             with open('files/' + filename, 'r', encoding='UTF-8') as f:
 
                 # Replace Each Line
-                with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
 
                     # The following submit all lines
                     fs = [executor.submit(findMatch, line) for line in f]
