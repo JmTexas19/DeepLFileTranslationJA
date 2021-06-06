@@ -8,7 +8,7 @@ from selenium.webdriver.remote.remote_connection import logging
 from selenium.webdriver.support.ui import WebDriverWait
 
 #Globals
-THREADS = 10    #Number of threads to create
+THREADS = 5    #Number of threads to create
 translationObjList = [None] * THREADS
 choice = None
 
@@ -119,36 +119,46 @@ def translate(text):
     
         #Clean
         tO.text = match.group()
-        tO.text = tO.text.strip()
         tO = filterVariables(tO)
         tO.release()
+
+        #Need this check because Python regex hates itself
+        if('\\' in tO.text):
+            tO.text = tO.text.replace('\\', '\\\\')
+            
         return tO.text
         
     except TimeoutException:
         logging.error('Failed to find translation for line: ' + tO.text)
         tO.release()
-        return tO.text
+
+        return text
 
 #Filter variables from string, then put back
 def filterVariables(tO):
+    #Quick Strip
+    tO.text = tO.text.strip()
+    tO.text = tO.text.replace('.', '')
+    tO.text = tO.text.replace('"', '')
+
     #1. Replace stars and placeholders and finish
     if('*' in tO.text):
         tO.text = tO.text.replace('*', '\\')
         tO.text = tO.text.replace('.', '')
 
-        if('var-' in tO.text):
+        if('var+' in tO.text):
             i = 0
             for var in tO.variableList:
-                tO.text = tO.text.replace(str(i) + 'var-', var, 1)
+                tO.text = tO.text.replace(str(i) + 'var+', var)
                 i += 1
 
         return tO
 
     #2 No stars, replace placeholders.
-    if('var-' in tO.text):
+    if('var+' in tO.text):
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(str(i) + 'var-', var, 1)
+            tO.text = tO.text.replace(str(i) + 'var+', var)
             i += 1
 
         return tO
@@ -158,7 +168,7 @@ def filterVariables(tO):
         tO.variableList = re.findall(pattern3, tO.text)
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, str(i) + 'var-', 1)
+            tO.text = tO.text.replace(var, str(i) + 'var+', 1)
             i += 1
 
         if('\\' in tO.text):
