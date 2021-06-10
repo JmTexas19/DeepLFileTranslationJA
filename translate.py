@@ -23,8 +23,8 @@ options.add_argument("--disable-web-security")
 options.add_argument('log-level=2')
 
 #Regex
-pattern1 = re.compile(r'(?<=[\"])[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗ！？＋（）【】、↑<>…･・。◎◆×♥★=　”゛0-9A-Za-z.?!;&/^%$#@*_+\-\\\[\]\(\)\"\'\ ]+(?=[\"])') #Main Matching Regex
-pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～ｾｸﾊﾗ]+)') #Filter Matches with no Japanese Text
+pattern1 = re.compile(r'(?<=[\"])[―一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗ！？＋（）【】、↑<>…･・。◎◆×♥★=　”゛0-9A-Za-z.?!;&/^%$#@*_+\-\\\[\]\(\)\"\'\ ]+(?=[\"])') #Main Matching Regex
+pattern2 = re.compile(r'([―一-龠ぁ-ゔァ-ヴー々〆〤～ｾｸﾊﾗ]+)') #Filter Matches with no Japanese Text
 pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[:%A-Za-z\=\-\+\/\\[\]\\\"\>\<]+)') #Filter for variables (e.g \\n[2])
 
 #Class to hold translation data
