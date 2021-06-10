@@ -7,9 +7,10 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.remote.remote_connection import logging
 from selenium.webdriver.support.ui import WebDriverWait
 
-#Globals
+#Globals`
 THREADS = 5    #Number of threads to create
 translationObjList = [None] * THREADS
+bannedWordsList = []
 choice = None
 
 #Logging
@@ -22,15 +23,16 @@ options.add_argument("--disable-web-security")
 options.add_argument('log-level=2')
 
 #Regex
-pattern1 = re.compile(r'([一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～！？＋、<>…_･・。♥★　”゛【】%0-9A-Za-z\\\[\] ]+)') #Main Matching Regex
-pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～]+)') #Filter Matches with no Japanese Text
-pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[\\]+)') #Filter for variables (e.g \\n[2])
+pattern1 = re.compile(r'(?<=[\"])[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗ！？＋（）【】、↑<>…･・。◎◆×♥★=　”゛0-9A-Za-z.?!;&/^%$#@*_+\-\\\[\]\(\)\"\'\ ]+(?=[\"])') #Main Matching Regex
+pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～ｾｸﾊﾗ]+)') #Filter Matches with no Japanese Text
+pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[:%A-Za-z\=\-\+\/\\[\]\\\"\>\<]+)') #Filter for variables (e.g \\n[2])
 
 #Class to hold translation data
 class translationObj:
     variableList = []
     text = ''
     lock = 0
+    filterVarCalled = 0
     driver = None
 
     def __init__(self):
@@ -106,82 +108,71 @@ def translate(text):
                     driver = tO.getDriver()
                     break   
 
-        #Get Page and Translate
-        logging.info('Translating: ' + tO.text + ' using driver ' + str(driver))
-        tO = filterVariables(tO)
-        url = 'https://www.deepl.com/translator#ja/en/' + tO.text
-        driver.get(url)
+        doOnce = 0
+        while("Content message" in tO.text or doOnce == 0):
+            #Get Page and Translate
+            logging.info('Translating: ' + tO.text + ' using driver ' + str(driver))
+            tO = filterVariables(tO)
+            url = 'https://www.deepl.com/translator#ja/en/' + tO.text
+            driver.get(url)
 
-        #Wait until translation is finished loading
-        match = WebDriverWait(driver, 10).until(lambda driver: 
-            re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
-        )
-    
+            #Wait until translation is finished loading
+            match = WebDriverWait(driver, 5).until(lambda driver: 
+                re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
+            )
+            doOnce = 1
+
         #Clean
         tO.text = match.group()
         tO = filterVariables(tO)
+        tO.filterVarCalled = 0
         tO.release()
-
-        #Need this check because Python regex hates itself
-        if('\\' in tO.text):
-            tO.text = tO.text.replace('\\', '\\\\')
             
         return tO.text
         
     except TimeoutException:
         logging.error('Failed to find translation for line: ' + tO.text)
+        tO = filterVariables(tO)
         tO.release()
 
-        return text
+        return tO.text
 
 #Filter variables from string, then put back
 def filterVariables(tO):
     #Quick Strip
     tO.text = tO.text.strip()
-    tO.text = tO.text.replace('.', '')
-    tO.text = tO.text.replace('"', '')
+    tO.text = tO.text.replace('。', '.')
+    tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
+    tO.text = re.sub(r'[…]+', '...', tO.text)
+    tO.text = re.sub(r'(?<!\\)"', '', tO.text)
+    tO.text = tO.text.replace('\u3000', ' ')
+    tO.text = tO.text.replace('！', '')
 
-    #1. Replace stars and placeholders and finish
-    if('*' in tO.text):
-        tO.text = tO.text.replace('*', '\\')
-        tO.text = tO.text.replace('.', '')
-
-        if('var+' in tO.text):
-            i = 0
-            for var in tO.variableList:
-                tO.text = tO.text.replace(str(i) + 'var+', var)
-                i += 1
-
-        return tO
-
-    #2 No stars, replace placeholders.
-    if('var+' in tO.text):
-        i = 0
-        for var in tO.variableList:
-            tO.text = tO.text.replace(str(i) + 'var+', var)
-            i += 1
-
-        return tO
-
-    #3 No stars and placeholders. Replace variables and backslashes and translate. 
-    if(re.search(pattern3, tO.text) != None):
+    #1. Replace variables and translate. 
+    if(re.search(pattern3, tO.text) != None and tO.filterVarCalled == 0):
         tO.variableList = re.findall(pattern3, tO.text)
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, str(i) + 'var+', 1)
+            tO.text = tO.text.replace(var, '{' + str(i) + '}', 1)
             i += 1
 
-        if('\\' in tO.text):
-            tO.text = tO.text.replace('\\', '')
-
-        return tO
-    
-    #4 No variables, replace backslashes and translate.
-    if('\\' in tO.text):
-        tO.text = tO.text.replace('\\', '*')    
+        tO.filterVarCalled = 1
         return tO
 
-    #5 Easy translation. Replace Nothing.
+    #2. Replace placeholders.
+    elif(re.search(r'{[0-9]+}', tO.text)):
+        i = 0
+        for var in tO.variableList:
+            tO.text = tO.text.replace('{' + str(i) + '}', var)
+            i += 1
+
+        tO.text = tO.text.replace('\\', '\\\\')
+        tO.filterVarCalled = 1
+        return tO
+
+    #Easy translation. Replace Nothing.
+    tO.filterVarCalled = 1
+    tO.text = tO.text.replace('\\', '\\\\')
     return tO
 
 def findMatch(line):
@@ -192,7 +183,7 @@ def findMatch(line):
         for match in re.findall(pattern1, line):
 
             # Filter out matches with no Japanese
-            if (re.search(pattern2, match) and "Call" not in match and "Para" not in match and '' != match):
+            if (re.search(pattern2, match) and not any(word in match for word in bannedWordsList) and '' != match):
                 if (choice == '1'):
                     translatedMatch = translate(match)
                     line = re.sub(r'(?<!\w)' + re.escape(match) + r'(?!\w)', translatedMatch, line, 1)
