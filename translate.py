@@ -23,9 +23,9 @@ options.add_argument("--disable-web-security")
 options.add_argument('log-level=2')
 
 #Regex
-pattern1 = re.compile(r'(?<=[\"])[―一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗ！？＋（）【】、↑<>…･・。◎◆×♥★=　”゛0-9A-Za-z.?!;&/^%$#@*_+\-\\\[\]\(\)\"\'\ ]+(?=[\"])') #Main Matching Regex
-pattern2 = re.compile(r'([―一-龠ぁ-ゔァ-ヴー々〆〤～ｾｸﾊﾗ]+)') #Filter Matches with no Japanese Text
-pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[:%A-Za-z\=\-\+\/\\[\]\\\"\>\<]+)') #Filter for variables (e.g \\n[2])
+pattern1 = re.compile(r'\"((?:[―一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗﾟ゛！？＋（）【】「」『』←→↓↑←→、<>…･・。◎■×◆★♥♡=　”0-9A-Za-z.?!:;&/^%$#@※*_+[\]()\'\\\" -]|\\.)*?)\"') #Main Matching Regex
+pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～ｾｸﾊﾗ―ﾚ]+)') #Filter Matches with no Japanese Text
+pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[%A-Za-z\=\-\+\/\\[\]\\\"\>\<]+)') #Filter for variables (e.g \\n[2])
 
 #Class to hold translation data
 class translationObj:
@@ -56,15 +56,15 @@ class translationObj:
 def main():
     global choice
     #Give Options to choose type of translation
-    while not(choice == '1' or choice == '2' or choice == '3'):
-        choice = input('Choose Translation Type:\n[1] Translate only matches\n[2] Translate entire line\n')
+    while not(choice == '1' or choice == '2'):
+        choice = input('Choose Translation Type:\n[1] Translate Files\n[2] Single Translation\n')
 
     #Create Directory and Drivers
     Path("translate").mkdir(parents=True, exist_ok=True)
     createDrivers()
 
     #Single Translation
-    if(choice == '3'):
+    if(choice == '2'):
         translate('実際、この日まで\\n[10]は\"人間の男\"とはセックスどころか、')
         quit()
         
@@ -117,7 +117,7 @@ def translate(text):
             driver.get(url)
 
             #Wait until translation is finished loading
-            match = WebDriverWait(driver, 5).until(lambda driver: 
+            match = WebDriverWait(driver, 10).until(lambda driver: 
                 re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
             )
             doOnce = 1
@@ -142,7 +142,6 @@ def filterVariables(tO):
     #Quick Strip
     tO.text = tO.text.strip()
     tO.text = tO.text.replace('。', '.')
-    tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
     tO.text = re.sub(r'[…]+', '...', tO.text)
     tO.text = re.sub(r'(?<!\\)"', '', tO.text)
     tO.text = tO.text.replace('\u3000', ' ')
@@ -166,6 +165,7 @@ def filterVariables(tO):
             tO.text = tO.text.replace('{' + str(i) + '}', var)
             i += 1
 
+        tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
         tO.text = tO.text.replace('\\', '\\\\')
         tO.filterVarCalled = 1
         return tO
@@ -185,12 +185,11 @@ def findMatch(line):
             # Filter out matches with no Japanese
             if (re.search(pattern2, match) and not any(word in match for word in bannedWordsList) and '' != match):
                 if (choice == '1'):
-                    translatedMatch = translate(match)
-                    line = re.sub(r'(?<!\w)' + re.escape(match) + r'(?!\w)', translatedMatch, line, 1)
+                    #Scrape off the crust
+                    match = re.sub(r'^(?=[\\<>a-zA-Z ])[\[\<\"\:a-zA-Z0-9_.\(\\ ]+|[\]\<\"\:a-zA-Z0-9_.\(\\ ]+$', '', match)
 
-                elif (choice == '2'):
-                    line = translate(match)
-                    break  # Don't want dupes
+                    translatedMatch = translate(match)
+                    line = re.sub(r'(?<!\wa)' + re.escape(match) + r'(?!\w)', translatedMatch, line, 1)
 
                 else:
                     logging.error('Choice Variable is an invalid value')
