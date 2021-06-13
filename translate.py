@@ -23,9 +23,9 @@ options.add_argument("--disable-web-security")
 options.add_argument('log-level=2')
 
 #Regex
-pattern1 = re.compile(r'\"((?:[―一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗﾟ゛！？＋（）【】「」『』←→↓↑←→、<>…･・。◎■×◆★♥♡=　”0-9A-Za-z.?!:;&/^%$#@※*_+[\]()\'\\\" -]|\\.)*?)\"') #Main Matching Regex
+pattern1 = re.compile(r'((?:[―－一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗﾟ゛・！？＋（）［］【】「」『』：←→↓↑←→、<>…･。◎■×◆★☆♥♡ⅠⅡⅢⅣⅤ=　”0-9A-Za-z.,?!:;&/^%$#@※*_+[\]()\'\" -]|\\.)*?)\"') #Main Matching Regex
 pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～ｾｸﾊﾗ―ﾚ]+)') #Filter Matches with no Japanese Text
-pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[%A-Za-z\=\-\+\/\\[\]\\\"\>\<]+)') #Filter for variables (e.g \\n[2])
+pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[\\][a-zA-Z]+|[%0-9 \=\-\+\/\\[\]\\\"\>\<]+)') #Filter for variables (e.g \\n[2])
 
 #Class to hold translation data
 class translationObj:
@@ -127,6 +127,14 @@ def translate(text):
         tO = filterVariables(tO)
         tO.filterVarCalled = 0
         tO.release()
+        
+        #Final QA
+        tO.text = tO.text.replace('[ ', '[')
+        tO.text = tO.text.replace(' ]', ']')
+        tO.text = tO.text.replace('( ', '(')
+        tO.text = tO.text.replace(' )', ')')
+        tO.text = tO.text.replace('< ', '<')
+        tO.text = tO.text.replace(' >', '>')
             
         return tO.text
         
@@ -166,7 +174,6 @@ def filterVariables(tO):
             i += 1
 
         tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
-        tO.text = tO.text.replace('\\', '\\\\')
         tO.filterVarCalled = 1
         return tO
 
@@ -186,10 +193,10 @@ def findMatch(line):
             if (re.search(pattern2, match) and not any(word in match for word in bannedWordsList) and '' != match):
                 if (choice == '1'):
                     #Scrape off the crust
-                    match = re.sub(r'^(?=[\\<>a-zA-Z ])[\[\<\"\:a-zA-Z0-9_.\(\\ ]+|[\]\<\"\:a-zA-Z0-9_.\(\\ ]+$', '', match)
+                    match = re.sub(r'^<?[<\"\:：a-zA-Z0-9_.\ ]+|[>\"\：:a-zA-Z0-9_.\ ]+>?$', '', match)
 
                     translatedMatch = translate(match)
-                    line = re.sub(r'(?<!\wa)' + re.escape(match) + r'(?!\w)', translatedMatch, line, 1)
+                    line = line.replace(match, translatedMatch, 1)
 
                 else:
                     logging.error('Choice Variable is an invalid value')
