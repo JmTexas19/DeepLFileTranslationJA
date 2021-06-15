@@ -23,9 +23,9 @@ options.add_argument("--disable-web-security")
 options.add_argument('log-level=2')
 
 #Regex
-pattern1 = re.compile(r'((?:[―－一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９々〆〤～ｾｸﾊﾗﾟ゛・！？＋（）［］【】「」『』：←→↓↑←→、<>…･。◎■×◆★☆♥♡ⅠⅡⅢⅣⅤ=　”0-9A-Za-z.,?!:;&/^%$#@※*_+[\]()\'\" -]|\\.)*?)\"') #Main Matching Regex
-pattern2 = re.compile(r'([一-龠ぁ-ゔァ-ヴー々〆〤～ｾｸﾊﾗ―ﾚ]+)') #Filter Matches with no Japanese Text
-pattern3 = re.compile(r'([\\]+[a-zA-Z0-9]+\[[0-9]+\]|[\\]+[a-zA-Z]+<[\\]+[a-zA-Z]+\[[0-9]+\]>|[\\]+[a-zA-Z]+<[-a-zA-Z]+.[\\]+.|[\\][a-zA-Z]+|[%0-9 \=\-\+\/\\[\]\\\"\>\<]+)') #Filter for variables (e.g \\n[2])
+pattern1 = re.compile(r'((?:[^\\\"]|\\.)*?)[\"\'<>]') #Match ANY in quotes
+pattern2 = re.compile(r'([\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u3000-\u303F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2000-\u206F]+)') #Match ANY JA Text
+pattern3 = re.compile(r'[\:\%\=\-\+\/\[\]\"\'\>\<]?[\\\/]+[a-zA-Z0-9_\<\>\"\'\:\;\\\/\[\]\(\)]+|\>\\[a-zA-Z]\<|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u3000-\u303F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26ff\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?]+|[\\]+') #Match ANY Symbol or Variable
 
 #Class to hold translation data
 class translationObj:
@@ -140,7 +140,7 @@ def translate(text):
         
     except TimeoutException:
         logging.error('Failed to find translation for line: ' + tO.text)
-        tO = filterVariables(tO)
+        #tO = filterVariables(tO)
         tO.release()
 
         return tO.text
@@ -167,7 +167,7 @@ def filterVariables(tO):
         return tO
 
     #2. Replace placeholders.
-    elif(re.search(r'{[0-9]+}', tO.text)):
+    elif(re.search(r'{[0-9}+]', tO.text)):
         i = 0
         for var in tO.variableList:
             tO.text = tO.text.replace('{' + str(i) + '}', var)
@@ -190,10 +190,10 @@ def findMatch(line):
         for match in re.findall(pattern1, line):
 
             # Filter out matches with no Japanese
-            if (re.search(pattern2, match) and not any(word in match for word in bannedWordsList) and '' != match):
+            if (re.search(pattern2, match) and not re.search(r'^[a-zA-Z0-9]+|^.+:', match)):   #Skip command plugins such as TE: or ParaAdd
                 if (choice == '1'):
                     #Scrape off the crust
-                    match = re.sub(r'^<?[<\"\:：a-zA-Z0-9_.\ ]+|[>\"\：:a-zA-Z0-9_.\ ]+>?$', '', match)
+                    match = re.sub(r'^<?[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u3000-\u303F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2000-\u206F\u2605-\u2606]+|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u3000-\u303F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2000-\u206F\u2605-\u2606]+>?$', '', match)
 
                     translatedMatch = translate(match)
                     line = line.replace(match, translatedMatch, 1)
