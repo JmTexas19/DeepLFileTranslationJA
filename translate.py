@@ -2,25 +2,34 @@ import logging
 import undetected_chromedriver.v2 as uc
 import re, os, time, concurrent.futures
 from pathlib import Path
-from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.remote.remote_connection import logging
 from selenium.webdriver.support.ui import WebDriverWait
+import urllib3
+import json
 
 #Globals`
-THREADS = 4    #Number of threads to create
+THREADS = 8    #Number of threads to create
 translationObjList = [None] * THREADS
 bannedWordsList = []
 choice = None
 
+#Token
+TOKEN = ''
+with open('token.json') as f:
+    TOKEN = json.load(f)['token']
+    f.close()
+
 #Logging
-logging.getLogger().setLevel('INFO')
+logging.getLogger().setLevel('ERROR')
+
+#HTTP
+http = urllib3.PoolManager()
 
 #Regex
 pattern1 = re.compile(r'((?:[^\\\"]|\\.)*?)[\"\'<>]') #Match ANY in quotes
-pattern2 = re.compile(r'([\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u3000-\u303F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2000-\u206F\u2600-\u26FF]+)') #Match ANY JA Text
-pattern3 = re.compile(r'[\:\%\=\-\+\/\[\]\"\'\>\<]?[\\\/]+[a-zA-Z0-9_\<\>\"\'\:\;\\\/\[\]\(\)]+|\>\\[a-zA-Z]\<|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26ff\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?]+|[\\]+') #Match ANY Symbol or Variable
+pattern2 = re.compile(r'([\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF]+)') #Match ANY JA Text
+pattern3 = re.compile(r'[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?、]+|[\\\"\']+') #Match ANY Symbol or Variable
 
 #Class to hold translation data
 class translationObj:
@@ -93,7 +102,7 @@ def createDrivers():
     for i in range(len(translationObjList)):
         translationObjList[i] = translationObj()
 
-#Translate Via DeepL
+##--------------TRANSLATE--------------##
 def translate(text):
     try:         
         #Assign object to thread
@@ -111,7 +120,7 @@ def translate(text):
         tO = filterVariables(tO)
 
         #DEEPL
-        if(len(text) > 3):
+        if(len(text) > 6):
             tO.doOnce = 0
             while("Content message" in tO.text or tO.doOnce == 0):
                 #Get Page and Translate
@@ -120,28 +129,35 @@ def translate(text):
                 driver.get(url)
 
                 #Wait until translation is finished loading
-                match = WebDriverWait(driver, 10).until(lambda driver: 
+                match = WebDriverWait(driver, 20).until(lambda driver: 
                     re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
                 )
+                tO.text = match.group()
                 tO.doOnce = 1
-        
+
         #GoogleTL
         else:
-            tO.doOnce = False
+            tO.doOnce = 0
             while("Content message" in tO.text or tO.doOnce == 0):
                 #Get Page and Translate
                 logging.info('GOOGLE: ' + tO.text + ' using driver ' + str(driver))
-                url = 'https://translate.google.com/?sl=ja&tl=en&text=' + tO.text + '&op=translate'
-                driver.get(url)
-
-                #Wait until translation is finished loading
-                match = WebDriverWait(driver, 10).until(lambda driver: 
-                    re.search(r'^(?!\s*$).+', driver.find_element_by_xpath('//*[@jsname="W297wb"]').get_attribute("innerHTML"))
+                
+                eBody = json.dumps([{'Text':tO.text}]).encode('utf-8')
+                resp = http.request(
+                    "POST", 
+                    "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=ja&to=en",
+                    body=eBody,
+                    headers={
+                        'Ocp-Apim-Subscription-Key':TOKEN,
+                        'Ocp-Apim-Subscription-Region':'southcentralus',
+                        'Content-Type':'application/json'
+                    }
                 )
+                data = json.loads(resp.data.decode('utf-8'))
+                tO.text = data[0]['translations'][0]['text']
                 tO.doOnce = 1
 
         #Clean
-        tO.text = match.group()
         tO = filterVariables(tO)
         tO.filterVarCalled = 0
         tO.release()
@@ -153,14 +169,19 @@ def translate(text):
         tO.text = tO.text.replace(' )', ')')
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
-            
+
         return tO.text
         
     except TimeoutException:
-        driver.save_screenshot('fail/' + str(driver)+ '.png')
         logging.error('Failed to find translation for line: ' + tO.text)
-        tO.release()
 
+        # - May get stuck if enabled
+        # Path("tmp").mkdir(parents=True, exist_ok=True)
+        # with open('/tmp/log.txt', 'a+'):
+        #     f.write(tO.text)
+        #     f.close()
+
+        tO.release()
         return tO.text
 
 #Filter variables from string, then put back
@@ -168,7 +189,6 @@ def filterVariables(tO):
     #Quick Strip
     tO.text = tO.text.strip()
     tO.text = tO.text.replace('。', '.')
-    tO.text = tO.text.replace('、', ',')
     tO.text = re.sub(r'[…]+', '...', tO.text)
     tO.text = re.sub(r'(?<!\\)"', '', tO.text)
     tO.text = tO.text.replace('\u3000', ' ')
@@ -188,7 +208,7 @@ def filterVariables(tO):
         return tO
 
     #2. Replace placeholders.
-    elif(re.search(r'{[0-9}+]', tO.text)):
+    elif(re.search(r'\[[0-9]\]+', tO.text)):
         i = 0
         for var in tO.variableList:
             tO.text = tO.text.replace('[' + str(i) + ']', var)
@@ -196,6 +216,7 @@ def filterVariables(tO):
 
         tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
         tO.filterVarCalled = 1
+
         return tO
 
     #Easy translation. Replace Nothing.
@@ -211,15 +232,17 @@ def findMatch(line):
         for match in re.findall(pattern1, line):
 
             # Filter out matches with no Japanese
-            if (re.search(pattern2, match) and re.search(r'^[a-zA-Z0-9_]', match) == None):   #Skip command plugins such as TE: or ParaAdd
+            if (re.search(pattern2, match) and re.search(r'^[a-zA-Z0-9_]|[a-zA-Z0-9_]$', match) == None):   #Skip command plugins such as TE: or ParaAdd
                 if (choice == '1'):
                     #Scrape off the crust
-                    match = re.sub(r'^<?[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u3000-\u303F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2000-\u206F\u2605-\u2606a-zA-Z0-9]+|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u3000-\u303F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2000-\u206F\u2605-\u2606a-zA-Z0-9]+>?$', '', match)
+                    match = re.sub(r'^([^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF\w,.?!])+|([^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF\w,.?!])+$', '', match)
 
-                    if(match != ''):
-                        translatedMatch = translate(match)
-                        line = line.replace('\\', '\\\\')
-                        line = re.sub(r"\b" + match + r"\b", translatedMatch, line)
+                    #Bye Bye Dupes
+                    translatedMatch = translate("".join(dict.fromkeys(match)))
+
+                    #Replace backslashes due to regex  
+                    translatedMatch = translatedMatch.replace('\\', '\\\\\\\\')
+                    line = re.sub(r"(?<!\w)" + re.escape(match) + r"(?!\w)", translatedMatch, line)
 
                 else:
                     logging.error('Choice Variable is an invalid value')
@@ -234,4 +257,4 @@ def findMatch(line):
 start = time.time()
 main()
 end = time.time()
-logging.info(str(end - start) + ' seconds')
+logging.critical(str(end - start) + ' seconds')
