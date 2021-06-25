@@ -9,7 +9,7 @@ import urllib3
 import json
 
 #Globals`
-THREADS = 8    #Number of threads to create
+THREADS = 5    #Number of threads to create
 translationObjList = [None] * THREADS
 bannedWordsList = []
 choice = None
@@ -27,7 +27,7 @@ logging.getLogger().setLevel('ERROR')
 http = urllib3.PoolManager()
 
 #Regex
-pattern1 = re.compile(r'((?:[^\\\"]|\\.)*?)[ \"\'<>【】]') #Match ANY in quotes
+pattern1 = re.compile(r'((?:[^\\\"]|\\.)*?)[\"\'<>【】]') #Match ANY in quotes
 pattern2 = re.compile(r'([\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF]+)') #Match ANY JA Text
 pattern3 = re.compile(r'[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?、]+|[\\\"\']+') #Match ANY Symbol or Variable
 
@@ -235,7 +235,7 @@ def findMatch(line):
             if (re.search(pattern2, match) and re.search(r'^[a-zA-Z0-9_]|[a-zA-Z0-9_]$', match) == None):   #Skip command plugins such as TE: or ParaAdd
                 if (choice == '1'):
                     #Scrape off the crust
-                    match = re.sub(r'^[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!]+|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!！？｡]+$', '', match)
+                    match = re.sub(r'^[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!！？｡、…]+|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!！？｡、…]+$', '', match)
 
                     #Bye Bye Dupes
                     translatedMatch = translate("".join(dict.fromkeys(match)))
