@@ -74,7 +74,7 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        translate('実際、この日まで\\n[10]は\"人間の男\"とはセックスどころか、')
+        translate('おはようございます')
         quit()
         
     # Open File
