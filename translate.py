@@ -57,7 +57,7 @@ class translationObj:
             return self.driver
         else:
             return None
-    
+
     def release(self):
         self.lock = 0
 
@@ -161,7 +161,7 @@ def translate(text):
         tO = filterVariables(tO)
         tO.filterVarCalled = 0
         tO.release()
-        
+
         #Final QA
         tO.text = tO.text.replace('[ ', '[')
         tO.text = tO.text.replace(' ]', ']')
@@ -171,7 +171,7 @@ def translate(text):
         tO.text = tO.text.replace(' >', '>')
 
         return tO.text
-        
+
     except TimeoutException:
         logging.error('Failed to find translation for line: ' + tO.text)
 
