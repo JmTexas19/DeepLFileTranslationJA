@@ -144,28 +144,6 @@ def translate(text):
             tO.text = match.group()
             tO.doOnce = 1
 
-        # #GoogleTL
-        # else:
-        #     tO.doOnce = 0
-        #     while("Content message" in tO.text or tO.doOnce == 0):
-        #         #Get Page and Translate
-        #         logging.info('GOOGLE: ' + tO.text + ' using driver ' + str(driver))
-                
-        #         eBody = json.dumps([{'Text':tO.text}]).encode('utf-8')
-        #         resp = http.request(
-        #             "POST", 
-        #             "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=ja&to=en",
-        #             body=eBody,
-        #             headers={
-        #                 'Ocp-Apim-Subscription-Key':TOKEN,
-        #                 'Ocp-Apim-Subscription-Region':'southcentralus',
-        #                 'Content-Type':'application/json'
-        #             }
-        #         )
-        #         data = json.loads(resp.data.decode('utf-8'))
-        #         tO.text = data[0]['translations'][0]['text']
-        #         tO.doOnce = 1
-
         #Clean
         tO = filterVariables(tO)
         tO.filterVarCalled = 0
@@ -178,20 +156,14 @@ def translate(text):
         tO.text = tO.text.replace(' )', ')')
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
+        tO.text = tO.text[0].upper() + tO.text[1:]
 
         return tO.text
 
     except TimeoutException:
         logging.error('Failed to find translation for line: ' + tO.text)
-
-        # - May get stuck if enabled
-        # Path("tmp").mkdir(parents=True, exist_ok=True)
-        # with open('/tmp/log.txt', 'a+'):
-        #     f.write(tO.text)
-        #     f.close()
-
         tO.release()
-        return translate(tO.text)
+        return translate(tO.text) # Try Again
 
 #Filter variables from string, then put back
 def filterVariables(tO):
@@ -250,7 +222,6 @@ def findMatch(data):
                             for i, choice in enumerate(list['parameters'][0]):
                                 print(choice)
                                 list['parameters'][0][i] = checkLine(choice)
-
     return data
 
 def checkLine(line):
