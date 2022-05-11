@@ -1,4 +1,5 @@
 import logging
+from pyexpat.errors import codes
 import undetected_chromedriver.v2 as uc
 import re, os, time, concurrent.futures
 from pathlib import Path
@@ -29,7 +30,8 @@ http = urllib3.PoolManager()
 #Regex
 pattern1 = re.compile(r'((?:[^\\\"]|\\.)*?)[\"\'<>【】]') #Match ANY in quotes
 pattern2 = re.compile(r'([\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF]+)') #Match ANY JA Text
-pattern3 = re.compile(r'[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?、]+|[\\\"\']+') #Match ANY Symbol or Variable
+pattern3 = re.compile(r'[\\]+[a-z]+\[[0-9]+\]|[\\]+[a-z]+')
+#pattern3 = re.compile(r'[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?、]+|[\\\"\']+') #Match ANY Symbol or Variable
 
 #Class to hold translation data
 class translationObj:
@@ -82,16 +84,22 @@ def main():
         with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
             with open('files/' + filename, 'r', encoding='UTF-8') as f:
 
-                # Replace Each Line
-                with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+                # Json Files
+                if (filename.endswith('json') is True):
+                    translatedData = findMatch(json.load(f))
+                    json.dump(translatedData, outFile, ensure_ascii=False)
+                    
+                else:
+                    # Replace Each Line
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
 
-                    # The following submits all lines
-                    fs = [executor.submit(findMatch, line) for line in f]
+                        # The following submits all lines
+                        fs = [executor.submit(findMatch, line) for line in f]
 
-                    # as_completed return arbitrary future when it is done
-                    # Use simple for-loop ensure the future are iterated sequentially
-                    for future in fs:
-                        outFile.write(future.result())
+                        # as_completed return arbitrary future when it is done
+                        # Use simple for-loop ensure the future are iterated sequentially
+                        for future in fs:
+                            outFile.write(future.result())
 
     #Close Drivers
     for obj in translationObjList:
@@ -120,42 +128,42 @@ def translate(text):
         tO = filterVariables(tO)
 
         #DEEPL
-        if(len(text) > 6):
-            tO.doOnce = 0
-            while("Content message" in tO.text or tO.doOnce == 0):
-                #Get Page and Translate
-                logging.info('DEEPL: ' + tO.text + ' using driver ' + str(driver))
-                url = 'https://www.deepl.com/translator#ja/en/' + tO.text
-                driver.get(url)
+        # if(len(text) > 6):
+        tO.doOnce = 0
+        while("Content message" in tO.text or tO.doOnce == 0):
+            #Get Page and Translate
+            logging.info('DEEPL: ' + tO.text + ' using driver ' + str(driver))
+            url = 'https://www.deepl.com/translator#ja/en/' + tO.text
+            driver.get(url)
 
-                #Wait until translation is finished loading
-                match = WebDriverWait(driver, 20).until(lambda driver: 
-                    re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
-                )
-                tO.text = match.group()
-                tO.doOnce = 1
+            #Wait until translation is finished loading
+            match = WebDriverWait(driver, 20).until(lambda driver: 
+                re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
+            )
+            tO.text = match.group()
+            tO.doOnce = 1
 
-        #GoogleTL
-        else:
-            tO.doOnce = 0
-            while("Content message" in tO.text or tO.doOnce == 0):
-                #Get Page and Translate
-                logging.info('GOOGLE: ' + tO.text + ' using driver ' + str(driver))
+        # #GoogleTL
+        # else:
+        #     tO.doOnce = 0
+        #     while("Content message" in tO.text or tO.doOnce == 0):
+        #         #Get Page and Translate
+        #         logging.info('GOOGLE: ' + tO.text + ' using driver ' + str(driver))
                 
-                eBody = json.dumps([{'Text':tO.text}]).encode('utf-8')
-                resp = http.request(
-                    "POST", 
-                    "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=ja&to=en",
-                    body=eBody,
-                    headers={
-                        'Ocp-Apim-Subscription-Key':TOKEN,
-                        'Ocp-Apim-Subscription-Region':'southcentralus',
-                        'Content-Type':'application/json'
-                    }
-                )
-                data = json.loads(resp.data.decode('utf-8'))
-                tO.text = data[0]['translations'][0]['text']
-                tO.doOnce = 1
+        #         eBody = json.dumps([{'Text':tO.text}]).encode('utf-8')
+        #         resp = http.request(
+        #             "POST", 
+        #             "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=ja&to=en",
+        #             body=eBody,
+        #             headers={
+        #                 'Ocp-Apim-Subscription-Key':TOKEN,
+        #                 'Ocp-Apim-Subscription-Region':'southcentralus',
+        #                 'Content-Type':'application/json'
+        #             }
+        #         )
+        #         data = json.loads(resp.data.decode('utf-8'))
+        #         tO.text = data[0]['translations'][0]['text']
+        #         tO.doOnce = 1
 
         #Clean
         tO = filterVariables(tO)
@@ -224,28 +232,32 @@ def filterVariables(tO):
     tO.text = tO.text.replace('\\', '\\\\')
     return tO
 
-def findMatch(line):
+def findMatch(data):
+    # Search Events
+    for event in data['events']:
+        if event:
+            for page in event['pages']:
+                for list in page['lists']:
+                    if(list['code'] == 401):
+                        for i, parameter in enumerate(list['parameters']):
+                            list['parameters'][i] = checkLine(parameter)
+
+    return data
+
+def checkLine(line):
     # Check if match in line
-    if (re.search(pattern1, line) != None):
+    if (re.search(pattern2, line) is not None):
 
-        # Translate each match in line. Depends on choice
-        for match in re.findall(pattern1, line):
+        if (choice == '1'):
+            #Bye Bye Dupes
+            translatedLine = translate("".join(dict.fromkeys(line)))
 
-            # Filter out matches with no Japanese
-            if (re.search(pattern2, match) and re.search(r'^[a-zA-Z0-9_]|[a-zA-Z0-9_]$', match) == None):   #Skip command plugins such as TE: or ParaAdd
-                if (choice == '1'):
-                    #Scrape off the crust
-                    match = re.sub(r'^[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!！？｡、…]+|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!！？｡、…]+$', '', match)
+            #Replace backslashes due to regex  
+            translatedLine = translatedLine.replace('\\', '\\\\\\\\')
+            line = re.sub(r"(?<!\w)" + re.escape(line) + r"(?!\w)", translatedLine, line, 1)
 
-                    #Bye Bye Dupes
-                    translatedMatch = translate("".join(dict.fromkeys(match)))
-
-                    #Replace backslashes due to regex  
-                    translatedMatch = translatedMatch.replace('\\', '\\\\\\\\')
-                    line = re.sub(r"(?<!\w)" + re.escape(match) + r"(?!\w)", translatedMatch, line, 1)
-
-                else:
-                    logging.error('Choice Variable is an invalid value')
+        else:
+            logging.error('Choice Variable is an invalid value')
                     
         return line
     # Skip Line
@@ -257,4 +269,54 @@ def findMatch(line):
 start = time.time()
 main()
 end = time.time()
-logging.critical(str(end - start) + ' seconds')
+
+# Event codes 
+#     case 401 : return 'Show Text';              break;
+#     case 102 : return 'Show Choices';           break;
+#     case 103 : return 'Input Number';           break;
+#     case 104 : return 'Select Item';            break;
+#     case 405 : return 'Show Scrolling Text';    break;
+#     case 111 : return 'Conditional Branch';     break;
+#     case 119 : return 'Common Event';           break;
+#     case 121 : return 'Control Switches';       break;
+#     case 122 : return 'Control Variables';      break;
+#     case 125 : return 'Change Gold';            break;
+#     case 126 : return 'Change Items';           break;
+#     case 127 : return 'Change Weapons';         break;
+#     case 128 : return 'Change Armors';          break;
+#     case 129 : return 'Change Party Member';    break;
+#     case 201 : return 'Transfer Player';        break;
+#     case 202 : return 'Set Vehicle Location';   break;
+#     case 203 : return 'Set Event Location';     break;
+#     case 505 : return 'Set Movement Route';     break;
+#     case 212 : return 'Show Animation';         break;
+#     case 231 : return 'Show Picture';           break;
+#     case 232 : return 'Move Picture';           break;
+#     case 285 : return 'Get Location Info';      break;
+#     case 301 : return 'Battle Processing';      break;
+#     case 302 :
+#     case 605 : return 'Shop Processing';        break;
+#     case 303 : return 'Name Input Processing';  break;
+#     case 311 : return 'Change HP';              break;
+#     case 312 : return 'Change MP';              break;
+#     case 326 : return 'Change TP';              break;
+#     case 313 : return 'Change State';           break;
+#     case 314 : return 'Recover All';            break;
+#     case 315 : return 'Change EXP';             break;
+#     case 316 : return 'Change Level';           break;
+#     case 317 : return 'Change Parameter';       break;
+#     case 318 : return 'Change Skill';           break;
+#     case 319 : return 'Change Equipment';       break;
+#     case 320 : return 'Change Name';            break;
+#     case 321 : return 'Change Class';           break;
+#     case 322 : return 'Change Actor Images';    break;
+#     case 324 : return 'Change Nickname';        break;
+#     case 325 : return 'Change Profile';         break;
+#     case 331 : return 'Change Enemy HP';        break;
+#     case 332 : return 'Change Enemy MP';        break;
+#     case 342 : return 'Change Enemy TP';        break;
+#     case 333 : return 'Change Enemy State';     break;
+#     case 336 : return 'Enemy Transform';        break;
+#     case 337 : return 'Show Battle Animation';  break;
+#     case 339 : return 'Force Action';           break;
+#     default : return code;
