@@ -88,6 +88,7 @@ def main():
                 if (filename.endswith('json') is True):
                     translatedData = findMatch(json.load(f))
                     json.dump(translatedData, outFile, ensure_ascii=False)
+                    print('Translated: ' + filename)
                     
                 else:
                     # Replace Each Line
@@ -190,7 +191,7 @@ def translate(text):
         #     f.close()
 
         tO.release()
-        return tO.text
+        return translate(tO.text)
 
 #Filter variables from string, then put back
 def filterVariables(tO):
@@ -237,10 +238,18 @@ def findMatch(data):
     for event in data['events']:
         if event:
             for page in event['pages']:
-                for list in page['lists']:
-                    if(list['code'] == 401):
-                        for i, parameter in enumerate(list['parameters']):
-                            list['parameters'][i] = checkLine(parameter)
+                if page:
+                    for list in page['list']:
+                        #Event Code: 401 Show Text
+                        if (list['code'] == 401):
+                            for i, parameter in enumerate(list['parameters']):
+                                list['parameters'][i] = checkLine(parameter)
+
+                        #Event Code: 102 Show Choice
+                        if (list['code'] == 102):
+                            for i, choice in enumerate(list['parameters'][0]):
+                                print(choice)
+                                list['parameters'][0][i] = checkLine(choice)
 
     return data
 
@@ -253,7 +262,7 @@ def checkLine(line):
             translatedLine = translate("".join(dict.fromkeys(line)))
 
             #Replace backslashes due to regex  
-            translatedLine = translatedLine.replace('\\', '\\\\\\\\')
+            translatedLine = translatedLine.replace('\\', '\\\\')
             line = re.sub(r"(?<!\w)" + re.escape(line) + r"(?!\w)", translatedLine, line, 1)
 
         else:
