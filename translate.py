@@ -76,7 +76,7 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        translate('おはようございます')
+        print(translate('もっと鍛錬を積まないと……。ブツブツ……。'))
         quit()
         
     # Open File (Threads)
@@ -158,7 +158,9 @@ def translate(text):
         tO.text = tO.text.replace(' )', ')')
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
+        tO.text = tO.text.replace('。', '.')
         tO.text = tO.text[0].upper() + tO.text[1:]
+        tO.text = tO.text.replace(', my God!', '')
 
         return tO.text
 
@@ -172,30 +174,27 @@ def translate(text):
 def filterVariables(tO):
     #Quick Strip
     tO.text = tO.text.strip()
-    tO.text = tO.text.replace('。', '.')
-    tO.text = re.sub(r'[…]+', '...', tO.text)
+    tO.text = re.sub(r'[…]+', '---', tO.text)
     tO.text = re.sub(r'(?<!\\)"', '', tO.text)
     tO.text = tO.text.replace('\u3000', ' ')
-    tO.text = tO.text.replace('！', '')
+    # tO.text = tO.text.replace('！', '!')
 
     #1. Replace variables and translate. 
     if(re.search(pattern3, tO.text) != None and tO.filterVarCalled == 0):
         tO.variableList = re.findall(pattern3, tO.text)
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, '{' + str(i) + '}', 1)
+            tO.text = tO.text.replace(var, '[t' + str(i) + ']', 1)
             i += 1
 
-        tO.text = tO.text.replace('{', '[')
-        tO.text = tO.text.replace('}', ']')
         tO.filterVarCalled = 1
         return tO
 
     #2. Replace placeholders.
-    elif(re.search(r'\[[0-9]\]+', tO.text)):
+    elif(re.search(r'\[t[0-9]\]+', tO.text)):
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace('[' + str(i) + ']', var)
+            tO.text = tO.text.replace('[t' + str(i) + ']', var)
             i += 1
 
         tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
@@ -214,16 +213,23 @@ def findMatch(data):
         if event:
             for page in event['pages']:
                 if page:
-                    for list in page['list']:
-                        #Event Code: 401 Show Text
-                        if (list['code'] == 401):
-                            for i, parameter in enumerate(list['parameters']):
-                                list['parameters'][i] = checkLine(parameter)
 
-                        #Event Code: 102 Show Choice
-                        if (list['code'] == 102):
-                            for i, choice in enumerate(list['parameters'][0]):
-                                list['parameters'][0][i] = checkLine(choice)
+                    #Event Code: 401 Show Text
+                    string = ""
+                    for i, list in enumerate(page['list']):
+                        if page['list'][i]['code'] == 401:
+                            string += list['parameters'][0]
+                            while(page['list'][i + 1]['code'] == 401):
+                                string += page['list'][i + 1]['parameters'][0]
+                                page['list'][i + 1]['parameters'][0] = ''
+                                i += 1
+                            list['parameters'][0] = checkLine(string)
+                            string = ''
+
+                    #Event Code: 102 Show Choice
+                    if (list['code'] == 102):
+                        for i, choice in enumerate(list['parameters'][0]):
+                            list['parameters'][0][i] = checkLine(choice)
     return data
 
 def checkLine(line):
@@ -232,7 +238,9 @@ def checkLine(line):
 
         if (choice == '1'):
             #Bye Bye Dupes
-            translatedLine = translate("".join(dict.fromkeys(line)))
+            # translatedLine = translate("".join(dict.fromkeys(line)))
+
+            translatedLine = translate(line)
 
             #Replace backslashes due to regex  
             translatedLine = translatedLine.replace('\\', '\\\\')
