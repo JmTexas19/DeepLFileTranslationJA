@@ -79,32 +79,34 @@ def main():
         translate('おはようございます')
         quit()
         
-    # Open File
-    for filename in os.listdir("files"):
-        with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
-            with open('files/' + filename, 'r', encoding='UTF-8') as f:
-
-                # Json Files
-                if (filename.endswith('json') is True):
-                    translatedData = findMatch(json.load(f))
-                    json.dump(translatedData, outFile, ensure_ascii=False)
-                    print('Translated: ' + filename)
-                    
-                else:
-                    # Replace Each Line
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
-
-                        # The following submits all lines
-                        fs = [executor.submit(findMatch, line) for line in f]
-
-                        # as_completed return arbitrary future when it is done
-                        # Use simple for-loop ensure the future are iterated sequentially
-                        for future in fs:
-                            outFile.write(future.result())
+    # Open File (Threads)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        for filename in os.listdir("files"):
+            if filename.endswith('json'):
+                executor.submit(handle, filename)
 
     #Close Drivers
     for obj in translationObjList:
         obj.driver.close()
+
+def handle(filename):
+    with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
+        with open('files/' + filename, 'r', encoding='UTF-8') as f:
+            translatedData = findMatch(json.load(f))
+            json.dump(translatedData, outFile, ensure_ascii=False)
+            print('Translated: ' + filename)
+                        
+                # else:
+                #     # Replace Each Line
+                #     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+
+                #         # The following submits all lines
+                #         fs = [executor.submit(findMatch, line) for line in f]
+
+                #         # as_completed return arbitrary future when it is done
+                #         # Use simple for-loop ensure the future are iterated sequentially
+                #         for future in fs:
+                #             outFile.write(future.result())
 
 #Create drivers for translation based on THREADS
 def createDrivers():
@@ -163,6 +165,7 @@ def translate(text):
     except TimeoutException:
         logging.error('Failed to find translation for line: ' + tO.text)
         tO.release()
+        logging.error('Retrying...')
         return translate(tO.text) # Try Again
 
 #Filter variables from string, then put back
@@ -220,7 +223,6 @@ def findMatch(data):
                         #Event Code: 102 Show Choice
                         if (list['code'] == 102):
                             for i, choice in enumerate(list['parameters'][0]):
-                                print(choice)
                                 list['parameters'][0][i] = checkLine(choice)
     return data
 
