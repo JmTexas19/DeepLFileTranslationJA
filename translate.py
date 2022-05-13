@@ -1,4 +1,6 @@
+from fileinput import filename
 import logging
+from operator import contains
 from pyexpat.errors import codes
 import textwrap
 import undetected_chromedriver.v2 as uc
@@ -103,15 +105,24 @@ def main():
     print("Failures: " + str(numOfFailures))
     with open('failureList.txt', 'w', encoding='utf-8') as outFile:
         for failure in failureList:
-            outFile.write('%s%n' % failure)
+            outFile.write('{failure}\n')
         outFile.close()
 
 def handle(filename):
     with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
-            translatedData = findMatch(json.load(f))
-            json.dump(translatedData, outFile, ensure_ascii=False)
-            print('Translated: ' + filename)
+            # Map Files
+            if 'Map' in filename:
+                translatedData = parseMap(json.load(f))
+                json.dump(translatedData, outFile, ensure_ascii=False)
+                print('Translated: {filename}\n')
+
+            # Common Event Files
+            elif 'CommonEvents' in filename:
+                translatedData = parseCommonEvents(json.load(f))
+                json.dump(translatedData, outFile, ensure_ascii=False)
+                print('Translated: {filename}\n')
+
 
 #Create drivers for translation based on THREADS
 def createDrivers():
@@ -164,7 +175,9 @@ def translate(text):
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
         tO.text = tO.text[0].upper() + tO.text[1:]
+        tO.text = re.sub(' +', ' ', tO.text)
         tO.text = tO.text.replace(', my God!', '')
+        tO.text = tO.text.replace(', sir.', '')
         tO.text = textwrap.fill(text=tO.text, width=56)
         tO.text = tO.text.strip()
 
@@ -227,7 +240,7 @@ def filterVariables(tO):
     tO.text = tO.text.replace('\\', '\\\\')
     return tO
 
-def findMatch(data):
+def parseMap(data):
     # Search Events
     for event in data['events']:
         if event:
@@ -247,15 +260,57 @@ def findMatch(data):
                             list['parameters'][0] = checkLine(string)
                             string = ''
 
-                    #Event Code: 102 Show Choice
-                    if (list['code'] == 102):
-                        for i, choice in enumerate(list['parameters'][0]):
-                            list['parameters'][0][i] = checkLine(choice)
-                    
-                    #Event Code: 102 Show Choice
-                    if (list['code'] == 108):
-                        for i, mapName in enumerate(list['parameters'][0]):
-                            list['parameters'][0][i] = 'info:' + (checkLine(mapName[5:]))
+                        #Event Code: 102 Show Choice
+                        if (list['code'] == 102):
+                            for i, choice in enumerate(list['parameters'][0]):
+                                list['parameters'][0][i] = checkLine(choice)
+                        
+                        #Event Code: 102 Show Choice
+                        if (list['code'] == 108):
+                            for mapName in (list['parameters']):
+                                if('info:' in mapName):
+                                    mapName = mapName.replace('info:', '')
+                                    mapName = 'info:' + checkLine(mapName)
+                                    list['parameters'][0] = mapName.replace(' ', '\t')
+                                else:
+                                    mapName = checkLine(mapName)
+                                    list['parameters'][0] = mapName.replace(' ', '\t')
+    return data
+
+def parseCommonEvents(data):
+    # Search Events
+    for page in data:
+        if page:
+            string = ""
+            for i, list in enumerate(page['list']):
+                
+                #Event Code: 401 Show Text
+                if page['list'][i]['code'] == 401:
+                    string += list['parameters'][0]
+                    while(page['list'][i + 1]['code'] == 401):
+                        string += ' '
+                        string += page['list'][i + 1]['parameters'][0]
+                        page['list'][i + 1]['parameters'][0] = ''
+                        i += 1
+                    list['parameters'][0] = checkLine(string)
+                    string = ''
+
+                #Event Code: 102 Show Choice
+                if (list['code'] == 102):
+                    for i, choice in enumerate(list['parameters'][0]):
+                        list['parameters'][0][i] = checkLine(choice)
+                
+                #Event Code: 102 Show Choice
+                if (list['code'] == 108):
+                    for mapName in (list['parameters']):
+                        if('info:' in mapName):
+                            mapName = mapName.replace('info:', '')
+                            mapName = 'info:' + checkLine(mapName)
+                            list['parameters'][0] = mapName.replace(' ', '\t')
+                        else:
+                            mapName = checkLine(mapName)
+                            list['parameters'][0] = mapName.replace(' ', '\t')
+    return data
 
 def checkLine(line):
     # Check if match in line
