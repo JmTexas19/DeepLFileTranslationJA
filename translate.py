@@ -1,5 +1,6 @@
 import logging
 from pyexpat.errors import codes
+import textwrap
 import undetected_chromedriver.v2 as uc
 import re, os, time, concurrent.futures
 from pathlib import Path
@@ -14,6 +15,8 @@ THREADS = 5    #Number of threads to create
 translationObjList = [None] * THREADS
 bannedWordsList = []
 choice = None
+numOfFailures = 0
+failureList = []
 
 #Token
 TOKEN = ''
@@ -41,6 +44,7 @@ class translationObj:
     filterVarCalled = 0
     driver = None
     doOnce = 0
+    count = 0
 
     def __init__(self):
         #Selenium
@@ -61,6 +65,9 @@ class translationObj:
             return None
 
     def release(self):
+        self.variableList = []
+        self.filterVarCalled = 0
+        self.doOnce = 0
         self.lock = 0
 
 ##--------------MAIN--------------##
@@ -76,18 +83,28 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        print(translate('もっと鍛錬を積まないと……。ブツブツ……。'))
+        print(translate('はぅううううううううう  あうあう あう あう  '))
         quit()
         
     # Open File (Threads)
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
         for filename in os.listdir("files"):
             if filename.endswith('json'):
-                executor.submit(handle, filename)
+                try:
+                    executor.submit(handle, filename)
+                except Exception:
+                    print(Exception)
 
     #Close Drivers
     for obj in translationObjList:
         obj.driver.close()
+
+    # Final Thingies
+    print("Failures: " + str(numOfFailures))
+    with open('failureList.txt', 'w', encoding='utf-8') as outFile:
+        for failure in failureList:
+            outFile.write('%s%n' % failure)
+        outFile.close()
 
 def handle(filename):
     with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
@@ -95,18 +112,6 @@ def handle(filename):
             translatedData = findMatch(json.load(f))
             json.dump(translatedData, outFile, ensure_ascii=False)
             print('Translated: ' + filename)
-                        
-                # else:
-                #     # Replace Each Line
-                #     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
-
-                #         # The following submits all lines
-                #         fs = [executor.submit(findMatch, line) for line in f]
-
-                #         # as_completed return arbitrary future when it is done
-                #         # Use simple for-loop ensure the future are iterated sequentially
-                #         for future in fs:
-                #             outFile.write(future.result())
 
 #Create drivers for translation based on THREADS
 def createDrivers():
@@ -116,7 +121,7 @@ def createDrivers():
 ##--------------TRANSLATE--------------##
 def translate(text):
     try:         
-        #Assign object to thread
+        # Assign object to thread
         tO = None
         driver = None
         while(tO == None):
@@ -148,7 +153,7 @@ def translate(text):
 
         #Clean
         tO = filterVariables(tO)
-        tO.filterVarCalled = 0
+        tO.count = 0
         tO.release()
 
         #Final QA
@@ -158,43 +163,58 @@ def translate(text):
         tO.text = tO.text.replace(' )', ')')
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
-        tO.text = tO.text.replace('。', '.')
         tO.text = tO.text[0].upper() + tO.text[1:]
         tO.text = tO.text.replace(', my God!', '')
+        tO.text = textwrap.fill(text=tO.text, width=56)
+        tO.text = tO.text.strip()
 
         return tO.text
 
     except TimeoutException:
-        logging.error('Failed to find translation for line: ' + tO.text)
+        tO.count += 1  # Increment Timeout
+        if tO.count > 5:  
+            tO.release()
+            print('Failed to translate: ' + tO.text)
+            global numOfFailures
+            global failureList
+            numOfFailures += 1
+            failureList.append(text)
+            return(text)
+        
         tO.release()
-        logging.error('Retrying...')
-        return translate(tO.text) # Try Again
+        return translate(text) # Try Again
 
 #Filter variables from string, then put back
 def filterVariables(tO):
-    #Quick Strip
-    tO.text = tO.text.strip()
-    tO.text = re.sub(r'[…]+', '---', tO.text)
+    # Clean Before Translation
+    tO.text = tO.text.replace('&lt;', '<')
+    tO.text = tO.text.replace('&gt;', '>')
+    tO.text = tO.text.replace('。', '. ')
+    tO.text = tO.text.replace('、', ', ')
+    tO.text = tO.text.replace('゛', ' " ')
+    tO.text = re.sub(r'[…]+', '..', tO.text)
     tO.text = re.sub(r'(?<!\\)"', '', tO.text)
+    tO.text = re.sub(r'(..)\1+', r'\1', tO.text) #Removes Duplicate Characters
     tO.text = tO.text.replace('\u3000', ' ')
-    # tO.text = tO.text.replace('！', '!')
+    tO.text = tO.text.replace('！', '!')
+    tO.text = tO.text.strip()
 
     #1. Replace variables and translate. 
     if(re.search(pattern3, tO.text) != None and tO.filterVarCalled == 0):
         tO.variableList = re.findall(pattern3, tO.text)
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, '[t' + str(i) + ']', 1)
+            tO.text = tO.text.replace(var, '<xid=\'' + str(i) + '\'>', 1)
             i += 1
 
         tO.filterVarCalled = 1
         return tO
 
     #2. Replace placeholders.
-    elif(re.search(r'\[t[0-9]\]+', tO.text)):
+    elif(re.search(r'\<xid=\'[0-9]\'\>+', tO.text)):
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace('[t' + str(i) + ']', var)
+            tO.text = tO.text.replace('<xid=\'' + str(i) + '\'>', var)
             i += 1
 
         tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
@@ -220,6 +240,7 @@ def findMatch(data):
                         if page['list'][i]['code'] == 401:
                             string += list['parameters'][0]
                             while(page['list'][i + 1]['code'] == 401):
+                                string += ' '
                                 string += page['list'][i + 1]['parameters'][0]
                                 page['list'][i + 1]['parameters'][0] = ''
                                 i += 1
@@ -230,7 +251,11 @@ def findMatch(data):
                     if (list['code'] == 102):
                         for i, choice in enumerate(list['parameters'][0]):
                             list['parameters'][0][i] = checkLine(choice)
-    return data
+                    
+                    #Event Code: 102 Show Choice
+                    if (list['code'] == 108):
+                        for i, mapName in enumerate(list['parameters'][0]):
+                            list['parameters'][0][i] = 'info:' + (checkLine(mapName[5:]))
 
 def checkLine(line):
     # Check if match in line
@@ -259,6 +284,7 @@ def checkLine(line):
 start = time.time()
 main()
 end = time.time()
+print("Seconds: " + str(end - start))
 
 # Event codes 
 #     case 401 : return 'Show Text';              break;
