@@ -177,10 +177,16 @@ def translate(text):
         tO.text = tO.text.replace(' )', ')')
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
-        tO.text = tO.text[0].upper() + tO.text[1:]
-        tO.text = re.sub(' +', ' ', tO.text)
         tO.text = tO.text.replace(', my God!', '')
         tO.text = tO.text.replace(', sir.', '')
+        tO.text = tO.text.replace('him', 'them')
+        tO.text = tO.text.replace('her', 'them')
+        tO.text = tO.text.replace('his', 'their')
+        tO.text = tO.text.replace('her', 'their')
+        tO.text = tO.text.replace('he is', 'they are')
+        tO.text = tO.text.replace('she is', 'they are')
+        tO.text = tO.text[0].upper() + tO.text[1:]
+        tO.text = re.sub(' +', ' ', tO.text)
         tO.text = textwrap.fill(text=tO.text, width=56)
         tO.text = tO.text.strip()
 
@@ -202,6 +208,7 @@ def translate(text):
 
 #Filter variables from string, then put back
 def filterVariables(tO):
+
     # Clean Before Translation
     tO.text = tO.text.replace('&lt;', '<')
     tO.text = tO.text.replace('&gt;', '>')
@@ -324,13 +331,11 @@ def handleParseTroops(event):
     return page
 
 def checkLine(line):
+
     # Check if match in line
     if (re.search(pattern2, line) is not None):
 
         if (choice == '1'):
-            #Bye Bye Dupes
-            # translatedLine = translate("".join(dict.fromkeys(line)))
-
             translatedLine = translate(line)
 
             #Replace backslashes due to regex  
@@ -341,6 +346,7 @@ def checkLine(line):
             logging.error('Choice Variable is an invalid value')
                     
         return line
+        
     # Skip Line
     else:
         logging.info('Skipping: ' + line)
