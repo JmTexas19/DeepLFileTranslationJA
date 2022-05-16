@@ -12,7 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 import urllib3
 import json
 
-#Globals`
+#Globals
 THREADS = 5    #Number of threads to create
 translationObjList = [None] * THREADS
 bannedWordsList = []
