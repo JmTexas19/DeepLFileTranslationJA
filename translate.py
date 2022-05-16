@@ -27,7 +27,7 @@ with open('token.json') as f:
     f.close()
 
 #Logging
-logging.getLogger().setLevel('ERROR')
+logging.getLogger().setLevel('INFO')
 
 #HTTP
 http = urllib3.PoolManager()
@@ -92,10 +92,7 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
         for filename in os.listdir("files"):
             if filename.endswith('json'):
-                try:
-                    executor.submit(handle, filename)
-                except Exception:
-                    print(Exception)
+                executor.submit(handle, filename)
 
     #Close Drivers
     for obj in translationObjList:
@@ -105,7 +102,7 @@ def main():
     print("Failures: " + str(numOfFailures))
     with open('failureList.txt', 'w', encoding='utf-8') as outFile:
         for failure in failureList:
-            outFile.write('{failure}\n')
+            outFile.write('%s\n'.format(failure))
         outFile.close()
 
 def handle(filename):
@@ -115,13 +112,19 @@ def handle(filename):
             if 'Map' in filename:
                 translatedData = parseMap(json.load(f))
                 json.dump(translatedData, outFile, ensure_ascii=False)
-                print('Translated: {filename}\n')
+                print('Translated: {0}'.format(filename))
 
             # Common Event Files
             elif 'CommonEvents' in filename:
                 translatedData = parseCommonEvents(json.load(f))
                 json.dump(translatedData, outFile, ensure_ascii=False)
-                print('Translated: {filename}\n')
+                print('Translated: {0}'.format(filename))
+
+            # Troops Files
+            elif 'Troops' in filename:
+                translatedData = parseTroops(json.load(f))
+                json.dump(translatedData, outFile, ensure_ascii=False)
+                print('Translated: {0}'.format(filename))
 
 
 #Create drivers for translation based on THREADS
@@ -240,77 +243,85 @@ def filterVariables(tO):
     tO.text = tO.text.replace('\\', '\\\\')
     return tO
 
+def searchCodes(page, list):
+    string = ""
+    for i, list in enumerate(page['list']):
+
+        #Event Code: 401 Show Text
+        if page['list'][i]['code'] == 401:
+            string += list['parameters'][0]
+            while(page['list'][i + 1]['code'] == 401):
+                string += ' '
+                string += page['list'][i + 1]['parameters'][0]
+                page['list'][i + 1]['parameters'][0] = ''
+                i += 1
+            list['parameters'][0] = checkLine(string)
+            string = ''
+
+        #Event Code: 102 Show Choice
+        if (list['code'] == 102):
+            for i, choice in enumerate(list['parameters'][0]):
+                list['parameters'][0][i] = checkLine(choice)
+        
+        #Event Code: 108 Screen Text
+        if (list['code'] == 108):
+            for mapName in (list['parameters']):
+                if('info:' in mapName):
+                    mapName = mapName.replace('info:', '')
+                    mapName = 'info:' + checkLine(mapName)
+                    list['parameters'][0] = mapName.replace(' ', '\t')
+                else:
+                    mapName = checkLine(mapName)
+                    list['parameters'][0] = mapName.replace(' ', '\t')
+
+        #Event Code: 356 DTEXT
+        if (list['code'] == 356):
+            for DTEXT in (list['parameters']):
+                if (re.search(pattern2, DTEXT) is not None and 'D_TEXT' in DTEXT):
+                    DTEXT = DTEXT.replace('D_TEXT ', '')
+                    DTEXT = 'D_TEXT ' + checkLine(DTEXT)
+                    list['parameters'][0] = DTEXT
+
 def parseMap(data):
-    # Search Events
-    for event in data['events']:
-        if event:
-            for page in event['pages']:
-                if page:
-
-                    #Event Code: 401 Show Text
-                    string = ""
-                    for i, list in enumerate(page['list']):
-                        if page['list'][i]['code'] == 401:
-                            string += list['parameters'][0]
-                            while(page['list'][i + 1]['code'] == 401):
-                                string += ' '
-                                string += page['list'][i + 1]['parameters'][0]
-                                page['list'][i + 1]['parameters'][0] = ''
-                                i += 1
-                            list['parameters'][0] = checkLine(string)
-                            string = ''
-
-                        #Event Code: 102 Show Choice
-                        if (list['code'] == 102):
-                            for i, choice in enumerate(list['parameters'][0]):
-                                list['parameters'][0][i] = checkLine(choice)
-                        
-                        #Event Code: 102 Show Choice
-                        if (list['code'] == 108):
-                            for mapName in (list['parameters']):
-                                if('info:' in mapName):
-                                    mapName = mapName.replace('info:', '')
-                                    mapName = 'info:' + checkLine(mapName)
-                                    list['parameters'][0] = mapName.replace(' ', '\t')
-                                else:
-                                    mapName = checkLine(mapName)
-                                    list['parameters'][0] = mapName.replace(' ', '\t')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        # Search Events
+        for event in data['events']:
+            if event:
+                executor.submit(handleParseMap, event)                     
     return data
+
+def handleParseMap(event):
+    for page in event['pages']:
+        if page:
+            string = ""
+            searchCodes(page, list)
+    return page
 
 def parseCommonEvents(data):
     # Search Events
-    for page in data:
-        if page:
-            string = ""
-            for i, list in enumerate(page['list']):
-                
-                #Event Code: 401 Show Text
-                if page['list'][i]['code'] == 401:
-                    string += list['parameters'][0]
-                    while(page['list'][i + 1]['code'] == 401):
-                        string += ' '
-                        string += page['list'][i + 1]['parameters'][0]
-                        page['list'][i + 1]['parameters'][0] = ''
-                        i += 1
-                    list['parameters'][0] = checkLine(string)
-                    string = ''
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        for page in data:
+            if page:
+                executor.submit(handleParseCommonEvents, page)
+        return data
 
-                #Event Code: 102 Show Choice
-                if (list['code'] == 102):
-                    for i, choice in enumerate(list['parameters'][0]):
-                        list['parameters'][0][i] = checkLine(choice)
-                
-                #Event Code: 102 Show Choice
-                if (list['code'] == 108):
-                    for mapName in (list['parameters']):
-                        if('info:' in mapName):
-                            mapName = mapName.replace('info:', '')
-                            mapName = 'info:' + checkLine(mapName)
-                            list['parameters'][0] = mapName.replace(' ', '\t')
-                        else:
-                            mapName = checkLine(mapName)
-                            list['parameters'][0] = mapName.replace(' ', '\t')
-    return data
+def handleParseCommonEvents(page):
+    searchCodes(page, list)
+    return page
+
+def parseTroops(data):
+    # Search Events
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        for event in data:
+            if event:
+                executor.submit(handleParseTroops, event)
+        return data
+
+def handleParseTroops(event):
+    for page in event['pages']:
+        if page:
+            searchCodes(page, list)
+    return page
 
 def checkLine(line):
     # Check if match in line
