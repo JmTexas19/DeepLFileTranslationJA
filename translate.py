@@ -1,4 +1,8 @@
+from fileinput import filename
 import logging
+from operator import contains
+from pyexpat.errors import codes
+import textwrap
 import undetected_chromedriver.v2 as uc
 import re, os, time, concurrent.futures
 from pathlib import Path
@@ -13,6 +17,8 @@ THREADS = 5    #Number of threads to create
 translationObjList = [None] * THREADS
 bannedWordsList = []
 choice = None
+numOfFailures = 0
+failureList = []
 
 #Token
 TOKEN = ''
@@ -21,7 +27,7 @@ with open('token.json') as f:
     f.close()
 
 #Logging
-logging.getLogger().setLevel('ERROR')
+logging.getLogger().setLevel('INFO')
 
 #HTTP
 http = urllib3.PoolManager()
@@ -29,7 +35,8 @@ http = urllib3.PoolManager()
 #Regex
 pattern1 = re.compile(r'((?:[^\\\"]|\\.)*?)[\"\'<>【】]') #Match ANY in quotes
 pattern2 = re.compile(r'([\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF]+)') #Match ANY JA Text
-pattern3 = re.compile(r'[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?、]+|[\\\"\']+') #Match ANY Symbol or Variable
+pattern3 = re.compile(r'[\\]+[a-z]+\[[0-9]+\]|[\\]+[a-z]+')
+#pattern3 = re.compile(r'[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?、]+|[\\\"\']+') #Match ANY Symbol or Variable
 
 #Class to hold translation data
 class translationObj:
@@ -39,6 +46,7 @@ class translationObj:
     filterVarCalled = 0
     driver = None
     doOnce = 0
+    count = 0
 
     def __init__(self):
         #Selenium
@@ -59,6 +67,9 @@ class translationObj:
             return None
 
     def release(self):
+        self.variableList = []
+        self.filterVarCalled = 0
+        self.doOnce = 0
         self.lock = 0
 
 ##--------------MAIN--------------##
@@ -74,28 +85,47 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        translate('おはようございます')
+        print(translate('はぅううううううううう  あうあう あう あう  '))
         quit()
         
-    # Open File
-    for filename in os.listdir("files"):
-        with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
-            with open('files/' + filename, 'r', encoding='UTF-8') as f:
-
-                # Replace Each Line
-                with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
-
-                    # The following submits all lines
-                    fs = [executor.submit(findMatch, line) for line in f]
-
-                    # as_completed return arbitrary future when it is done
-                    # Use simple for-loop ensure the future are iterated sequentially
-                    for future in fs:
-                        outFile.write(future.result())
+    # Open File (Threads)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        for filename in os.listdir("files"):
+            if filename.endswith('json'):
+                executor.submit(handle, filename)
 
     #Close Drivers
     for obj in translationObjList:
         obj.driver.close()
+
+    # Final Thingies
+    print("Failures: " + str(numOfFailures))
+    with open('failureList.txt', 'w', encoding='utf-8') as outFile:
+        for failure in failureList:
+            outFile.write('%s\n'.format(failure))
+        outFile.close()
+
+def handle(filename):
+    with open('translate/' + filename, 'w', encoding='UTF-8') as outFile:
+        with open('files/' + filename, 'r', encoding='UTF-8') as f:
+            # Map Files
+            if 'Map' in filename:
+                translatedData = parseMap(json.load(f))
+                json.dump(translatedData, outFile, ensure_ascii=False)
+                print('Translated: {0}'.format(filename))
+
+            # Common Event Files
+            elif 'CommonEvents' in filename:
+                translatedData = parseCommonEvents(json.load(f))
+                json.dump(translatedData, outFile, ensure_ascii=False)
+                print('Translated: {0}'.format(filename))
+
+            # Troops Files
+            elif 'Troops' in filename:
+                translatedData = parseTroops(json.load(f))
+                json.dump(translatedData, outFile, ensure_ascii=False)
+                print('Translated: {0}'.format(filename))
+
 
 #Create drivers for translation based on THREADS
 def createDrivers():
@@ -105,7 +135,7 @@ def createDrivers():
 ##--------------TRANSLATE--------------##
 def translate(text):
     try:         
-        #Assign object to thread
+        # Assign object to thread
         tO = None
         driver = None
         while(tO == None):
@@ -120,46 +150,24 @@ def translate(text):
         tO = filterVariables(tO)
 
         #DEEPL
-        if(len(text) > 6):
-            tO.doOnce = 0
-            while("Content message" in tO.text or tO.doOnce == 0):
-                #Get Page and Translate
-                logging.info('DEEPL: ' + tO.text + ' using driver ' + str(driver))
-                url = 'https://www.deepl.com/translator#ja/en/' + tO.text
-                driver.get(url)
+        # if(len(text) > 6):
+        tO.doOnce = 0
+        while("Content message" in tO.text or tO.doOnce == 0):
+            #Get Page and Translate
+            logging.info('DEEPL: ' + tO.text + ' using driver ' + str(driver))
+            url = 'https://www.deepl.com/translator#ja/en/' + tO.text
+            driver.get(url)
 
-                #Wait until translation is finished loading
-                match = WebDriverWait(driver, 20).until(lambda driver: 
-                    re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
-                )
-                tO.text = match.group()
-                tO.doOnce = 1
-
-        #GoogleTL
-        else:
-            tO.doOnce = 0
-            while("Content message" in tO.text or tO.doOnce == 0):
-                #Get Page and Translate
-                logging.info('GOOGLE: ' + tO.text + ' using driver ' + str(driver))
-                
-                eBody = json.dumps([{'Text':tO.text}]).encode('utf-8')
-                resp = http.request(
-                    "POST", 
-                    "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=ja&to=en",
-                    body=eBody,
-                    headers={
-                        'Ocp-Apim-Subscription-Key':TOKEN,
-                        'Ocp-Apim-Subscription-Region':'southcentralus',
-                        'Content-Type':'application/json'
-                    }
-                )
-                data = json.loads(resp.data.decode('utf-8'))
-                tO.text = data[0]['translations'][0]['text']
-                tO.doOnce = 1
+            #Wait until translation is finished loading
+            match = WebDriverWait(driver, 20).until(lambda driver: 
+                re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
+            )
+            tO.text = match.group()
+            tO.doOnce = 1
 
         #Clean
         tO = filterVariables(tO)
-        tO.filterVarCalled = 0
+        tO.count = 0
         tO.release()
 
         #Final QA
@@ -169,49 +177,67 @@ def translate(text):
         tO.text = tO.text.replace(' )', ')')
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
+        tO.text = tO.text.replace(', my God!', '')
+        tO.text = tO.text.replace(', sir.', '')
+        tO.text = tO.text.replace('him', 'them')
+        tO.text = tO.text.replace('her', 'them')
+        tO.text = tO.text.replace('his', 'their')
+        tO.text = tO.text.replace('her', 'their')
+        tO.text = tO.text.replace('he is', 'they are')
+        tO.text = tO.text.replace('she is', 'they are')
+        tO.text = tO.text[0].upper() + tO.text[1:]
+        tO.text = re.sub(' +', ' ', tO.text)
+        tO.text = textwrap.fill(text=tO.text, width=56)
+        tO.text = tO.text.strip()
 
         return tO.text
 
     except TimeoutException:
-        logging.error('Failed to find translation for line: ' + tO.text)
-
-        # - May get stuck if enabled
-        # Path("tmp").mkdir(parents=True, exist_ok=True)
-        # with open('/tmp/log.txt', 'a+'):
-        #     f.write(tO.text)
-        #     f.close()
-
+        tO.count += 1  # Increment Timeout
+        if tO.count > 5:  
+            tO.release()
+            print('Failed to translate: ' + tO.text)
+            global numOfFailures
+            global failureList
+            numOfFailures += 1
+            failureList.append(text)
+            return(text)
+        
         tO.release()
-        return tO.text
+        return translate(text) # Try Again
 
 #Filter variables from string, then put back
 def filterVariables(tO):
-    #Quick Strip
-    tO.text = tO.text.strip()
-    tO.text = tO.text.replace('。', '.')
-    tO.text = re.sub(r'[…]+', '...', tO.text)
+
+    # Clean Before Translation
+    tO.text = tO.text.replace('&lt;', '<')
+    tO.text = tO.text.replace('&gt;', '>')
+    tO.text = tO.text.replace('。', '. ')
+    tO.text = tO.text.replace('、', ', ')
+    tO.text = tO.text.replace('゛', ' " ')
+    tO.text = re.sub(r'[…]+', '..', tO.text)
     tO.text = re.sub(r'(?<!\\)"', '', tO.text)
+    tO.text = re.sub(r'(..)\1+', r'\1', tO.text) #Removes Duplicate Characters
     tO.text = tO.text.replace('\u3000', ' ')
-    tO.text = tO.text.replace('！', '')
+    tO.text = tO.text.replace('！', '!')
+    tO.text = tO.text.strip()
 
     #1. Replace variables and translate. 
     if(re.search(pattern3, tO.text) != None and tO.filterVarCalled == 0):
         tO.variableList = re.findall(pattern3, tO.text)
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, '{' + str(i) + '}', 1)
+            tO.text = tO.text.replace(var, '<xid=\'' + str(i) + '\'>', 1)
             i += 1
 
-        tO.text = tO.text.replace('{', '[')
-        tO.text = tO.text.replace('}', ']')
         tO.filterVarCalled = 1
         return tO
 
     #2. Replace placeholders.
-    elif(re.search(r'\[[0-9]\]+', tO.text)):
+    elif(re.search(r'\<xid=\'[0-9]\'\>+', tO.text)):
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace('[' + str(i) + ']', var)
+            tO.text = tO.text.replace('<xid=\'' + str(i) + '\'>', var)
             i += 1
 
         tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
@@ -224,30 +250,103 @@ def filterVariables(tO):
     tO.text = tO.text.replace('\\', '\\\\')
     return tO
 
-def findMatch(line):
-    # Check if match in line
-    if (re.search(pattern1, line) != None):
+def searchCodes(page, list):
+    string = ""
+    for i, list in enumerate(page['list']):
 
-        # Translate each match in line. Depends on choice
-        for match in re.findall(pattern1, line):
+        #Event Code: 401 Show Text
+        if page['list'][i]['code'] == 401:
+            string += list['parameters'][0]
+            while(page['list'][i + 1]['code'] == 401):
+                string += ' '
+                string += page['list'][i + 1]['parameters'][0]
+                page['list'][i + 1]['parameters'][0] = ''
+                i += 1
+            list['parameters'][0] = checkLine(string)
+            string = ''
 
-            # Filter out matches with no Japanese
-            if (re.search(pattern2, match) and re.search(r'^[a-zA-Z0-9_]|[a-zA-Z0-9_]$', match) == None):   #Skip command plugins such as TE: or ParaAdd
-                if (choice == '1'):
-                    #Scrape off the crust
-                    match = re.sub(r'^[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!！？｡、…]+|[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF,.?!！？｡、…]+$', '', match)
-
-                    #Bye Bye Dupes
-                    translatedMatch = translate("".join(dict.fromkeys(match)))
-
-                    #Replace backslashes due to regex  
-                    translatedMatch = translatedMatch.replace('\\', '\\\\\\\\')
-                    line = re.sub(r"(?<!\w)" + re.escape(match) + r"(?!\w)", translatedMatch, line, 1)
-
+        #Event Code: 102 Show Choice
+        if (list['code'] == 102):
+            for i, choice in enumerate(list['parameters'][0]):
+                list['parameters'][0][i] = checkLine(choice)
+        
+        #Event Code: 108 Screen Text
+        if (list['code'] == 108):
+            for mapName in (list['parameters']):
+                if('info:' in mapName):
+                    mapName = mapName.replace('info:', '')
+                    mapName = 'info:' + checkLine(mapName)
+                    list['parameters'][0] = mapName.replace(' ', '\t')
                 else:
-                    logging.error('Choice Variable is an invalid value')
+                    mapName = checkLine(mapName)
+                    list['parameters'][0] = mapName.replace(' ', '\t')
+
+        #Event Code: 356 DTEXT
+        if (list['code'] == 356):
+            for DTEXT in (list['parameters']):
+                if (re.search(pattern2, DTEXT) is not None and 'D_TEXT' in DTEXT):
+                    DTEXT = DTEXT.replace('D_TEXT ', '')
+                    DTEXT = 'D_TEXT ' + checkLine(DTEXT)
+                    list['parameters'][0] = DTEXT
+
+def parseMap(data):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        # Search Events
+        for event in data['events']:
+            if event:
+                executor.submit(handleParseMap, event)                     
+    return data
+
+def handleParseMap(event):
+    for page in event['pages']:
+        if page:
+            string = ""
+            searchCodes(page, list)
+    return page
+
+def parseCommonEvents(data):
+    # Search Events
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        for page in data:
+            if page:
+                executor.submit(handleParseCommonEvents, page)
+        return data
+
+def handleParseCommonEvents(page):
+    searchCodes(page, list)
+    return page
+
+def parseTroops(data):
+    # Search Events
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        for event in data:
+            if event:
+                executor.submit(handleParseTroops, event)
+        return data
+
+def handleParseTroops(event):
+    for page in event['pages']:
+        if page:
+            searchCodes(page, list)
+    return page
+
+def checkLine(line):
+
+    # Check if match in line
+    if (re.search(pattern2, line) is not None):
+
+        if (choice == '1'):
+            translatedLine = translate(line)
+
+            #Replace backslashes due to regex  
+            translatedLine = translatedLine.replace('\\', '\\\\')
+            line = re.sub(r"(?<!\w)" + re.escape(line) + r"(?!\w)", translatedLine, line, 1)
+
+        else:
+            logging.error('Choice Variable is an invalid value')
                     
         return line
+        
     # Skip Line
     else:
         logging.info('Skipping: ' + line)
@@ -257,4 +356,55 @@ def findMatch(line):
 start = time.time()
 main()
 end = time.time()
-logging.critical(str(end - start) + ' seconds')
+print("Seconds: " + str(end - start))
+
+# Event codes 
+#     case 401 : return 'Show Text';              break;
+#     case 102 : return 'Show Choices';           break;
+#     case 103 : return 'Input Number';           break;
+#     case 104 : return 'Select Item';            break;
+#     case 405 : return 'Show Scrolling Text';    break;
+#     case 111 : return 'Conditional Branch';     break;
+#     case 119 : return 'Common Event';           break;
+#     case 121 : return 'Control Switches';       break;
+#     case 122 : return 'Control Variables';      break;
+#     case 125 : return 'Change Gold';            break;
+#     case 126 : return 'Change Items';           break;
+#     case 127 : return 'Change Weapons';         break;
+#     case 128 : return 'Change Armors';          break;
+#     case 129 : return 'Change Party Member';    break;
+#     case 201 : return 'Transfer Player';        break;
+#     case 202 : return 'Set Vehicle Location';   break;
+#     case 203 : return 'Set Event Location';     break;
+#     case 505 : return 'Set Movement Route';     break;
+#     case 212 : return 'Show Animation';         break;
+#     case 231 : return 'Show Picture';           break;
+#     case 232 : return 'Move Picture';           break;
+#     case 285 : return 'Get Location Info';      break;
+#     case 301 : return 'Battle Processing';      break;
+#     case 302 :
+#     case 605 : return 'Shop Processing';        break;
+#     case 303 : return 'Name Input Processing';  break;
+#     case 311 : return 'Change HP';              break;
+#     case 312 : return 'Change MP';              break;
+#     case 326 : return 'Change TP';              break;
+#     case 313 : return 'Change State';           break;
+#     case 314 : return 'Recover All';            break;
+#     case 315 : return 'Change EXP';             break;
+#     case 316 : return 'Change Level';           break;
+#     case 317 : return 'Change Parameter';       break;
+#     case 318 : return 'Change Skill';           break;
+#     case 319 : return 'Change Equipment';       break;
+#     case 320 : return 'Change Name';            break;
+#     case 321 : return 'Change Class';           break;
+#     case 322 : return 'Change Actor Images';    break;
+#     case 324 : return 'Change Nickname';        break;
+#     case 325 : return 'Change Profile';         break;
+#     case 331 : return 'Change Enemy HP';        break;
+#     case 332 : return 'Change Enemy MP';        break;
+#     case 342 : return 'Change Enemy TP';        break;
+#     case 333 : return 'Change Enemy State';     break;
+#     case 336 : return 'Enemy Transform';        break;
+#     case 337 : return 'Show Battle Animation';  break;
+#     case 339 : return 'Force Action';           break;
+#     default : return code;
