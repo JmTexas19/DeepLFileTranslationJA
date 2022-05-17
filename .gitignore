@@ -1,4 +1,6 @@
 files/*
 translate/*
+failures/*
 token.json
 !.gitkeep
+failureList.txt
