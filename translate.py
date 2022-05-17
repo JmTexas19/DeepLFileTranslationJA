@@ -27,7 +27,7 @@ with open('token.json') as f:
     f.close()
 
 #Logging
-logging.getLogger().setLevel('INFO')
+logging.getLogger().setLevel('ERROR')
 
 #HTTP
 http = urllib3.PoolManager()
@@ -102,7 +102,7 @@ def main():
     print("Failures: " + str(numOfFailures))
     with open('failureList.txt', 'w', encoding='utf-8') as outFile:
         for failure in failureList:
-            outFile.write('%s\n'.format(failure))
+            outFile.write('{0}\n'.format(failure))
         outFile.close()
 
 def handle(filename):
@@ -200,6 +200,7 @@ def translate(text):
             global numOfFailures
             global failureList
             numOfFailures += 1
+            text = text.replace('\\', '\\\\') # Need to fix the backslashes again
             failureList.append(text)
             return(text)
         
