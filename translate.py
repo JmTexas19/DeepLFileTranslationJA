@@ -3,6 +3,7 @@ import logging
 from operator import contains
 from pyexpat.errors import codes
 import textwrap
+from tkinter import E
 import undetected_chromedriver.v2 as uc
 import re, os, time, concurrent.futures
 from pathlib import Path
@@ -53,9 +54,10 @@ class translationObj:
         options = uc.ChromeOptions()
         options.add_argument('log-level=2')
         options.add_argument('--no-first-run --no-service-autorun --password-store=basic')
+        options.add_argument('--blink-settings=imagesEnabled=false')
         driver = uc.Chrome(options=options)
-        driver.set_page_load_timeout(15)
-        driver.implicitly_wait(15) 
+        driver.set_page_load_timeout(10)
+        driver.implicitly_wait(10) 
         self.driver = driver  
 
     #Assign driver if not locked
@@ -85,7 +87,7 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        print(translate('はぅううううううううう  あうあう あう あう  '))
+        print(translate('コーデリアは、なにやら支度に時間がかかっている ようでございますね…。 様子を見に行ってまいります。<xid=0>[メイド長]', 0))
         quit()
         
     # Open File (Threads)
@@ -133,7 +135,7 @@ def createDrivers():
         translationObjList[i] = translationObj()
 
 ##--------------TRANSLATE--------------##
-def translate(text):
+def translate(text, engine):
     try:         
         # Assign object to thread
         tO = None
@@ -150,20 +152,33 @@ def translate(text):
         tO = filterVariables(tO)
 
         #DEEPL
-        # if(len(text) > 6):
-        tO.doOnce = 0
-        while("Content message" in tO.text or tO.doOnce == 0):
+        if(engine == 0):
+            tO.doOnce = 0
+            while("Content message" in tO.text or tO.doOnce == 0):
+                #Get Page and Translate
+                logging.info('DEEPL: ' + tO.text + ' using driver ' + str(driver))
+                url = 'https://www.deepl.com/translator#ja/en/' + tO.text
+                driver.get(url)
+
+                #Wait until translation is finished loading
+                match = WebDriverWait(driver, 20).until(lambda driver: 
+                    re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
+                )
+                tO.text = match.group()
+                tO.doOnce = 1
+        
+        #GOOGLE
+        else:
             #Get Page and Translate
-            logging.info('DEEPL: ' + tO.text + ' using driver ' + str(driver))
-            url = 'https://www.deepl.com/translator#ja/en/' + tO.text
+            logging.info('GOOGLE: ' + tO.text + ' using driver ' + str(driver))
+            url = 'https://translate.google.com/?sl=ja&tl=en&text=' + tO.text
             driver.get(url)
 
             #Wait until translation is finished loading
-            match = WebDriverWait(driver, 20).until(lambda driver: 
-                re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
+            match = WebDriverWait(driver, 10).until(lambda driver: 
+                re.search(r'^(?!\s*$).+', driver.find_element_by_xpath("//span[@class='Q4iAWc']").get_attribute("innerHTML"))
             )
             tO.text = match.group()
-            tO.doOnce = 1
 
         #Clean
         tO = filterVariables(tO)
@@ -177,35 +192,61 @@ def translate(text):
         tO.text = tO.text.replace(' )', ')')
         tO.text = tO.text.replace('< ', '<')
         tO.text = tO.text.replace(' >', '>')
-        tO.text = tO.text.replace(', my God!', '')
-        tO.text = tO.text.replace(', sir.', '')
-        tO.text = tO.text.replace('him', 'them')
-        tO.text = tO.text.replace('her', 'them')
-        tO.text = tO.text.replace('his', 'their')
-        tO.text = tO.text.replace('her', 'their')
-        tO.text = tO.text.replace('he is', 'they are')
-        tO.text = tO.text.replace('she is', 'they are')
+        tO.text = tO.text.replace("' ]", "']")
+        tO.text = tO.text.replace(" '", "'")
+        tO.text = tO.text.replace('x id = ', 'xid=')
+        tO.text = re.sub(r"\b%s\b" % 'wow', 'ah', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % ', my God', '', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'Oh my god', 'Ah', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'Oh my god', 'Ah', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % ', sir.', '', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % ', sir', '', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'moo', 'kuchu', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'Gimme', 'guchu', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'sperming', 'milking', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'sperm', 'semen', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'man parts', 'penis', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'he is', 'they are', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'she is', 'they are', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'help me, man', 'help me... please...', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'Ouch', 'coming', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "I'm kind of tickled", 'I find it funny', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "huh", 'eh', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"(\W\W)I don't know+([,\.])", r'\1eh\2', tO.text)
+        
+
+        #Formatting
+        tO.text = re.sub(r'(.{12,})\1', r'\1', tO.text)  # Long repeating phrases
         tO.text = tO.text[0].upper() + tO.text[1:]
         tO.text = re.sub(' +', ' ', tO.text)
-        tO.text = textwrap.fill(text=tO.text, width=56)
-        tO.text = tO.text.strip()
+        tO.text = textwrap.fill(text=tO.text, width=53)
+        tO.text = tO.text.strip('.')
 
         return tO.text
 
     except TimeoutException:
         tO.count += 1  # Increment Timeout
-        if tO.count > 5:  
+        print('{0} Timeout #: {1}'.format(tO.text, tO.count))
+
+        #DESPAIR
+        if tO.count > 5:
             tO.release()
+            tO.count = 0
             print('Failed to translate: ' + tO.text)
             global numOfFailures
             global failureList
             numOfFailures += 1
             text = text.replace('\\', '\\\\') # Need to fix the backslashes again
-            failureList.append(text)
+            failureList.append(tO.text + '|' + text)
             return(text)
+
+        #Try Google
+        if tO.count > 2:
+            tO.release()
+            return translate(text, 1)  
         
         tO.release()
-        return translate(text) # Try Again
+        return translate(text, 0) # Try Again
 
 #Filter variables from string, then put back
 def filterVariables(tO):
@@ -213,14 +254,20 @@ def filterVariables(tO):
     # Clean Before Translation
     tO.text = tO.text.replace('&lt;', '<')
     tO.text = tO.text.replace('&gt;', '>')
-    tO.text = tO.text.replace('。', '. ')
-    tO.text = tO.text.replace('、', ', ')
-    tO.text = tO.text.replace('゛', ' " ')
-    tO.text = re.sub(r'[…]+', '..', tO.text)
+    tO.text = tO.text.replace('゛', '" ')
     tO.text = re.sub(r'(?<!\\)"', '', tO.text)
-    tO.text = re.sub(r'(..)\1+', r'\1', tO.text) #Removes Duplicate Characters
     tO.text = tO.text.replace('\u3000', ' ')
-    tO.text = tO.text.replace('！', '!')
+    #tO.text = re.sub(r'[…]+', '', tO.text)
+    #tO.text = tO.text.replace('。', '. ')
+    #tO.text = tO.text.replace('、', ', ')
+    #tO.text = tO.text.replace('！', '!')
+
+    # tO.text = re.sub(r'(.){1}\1+([\\,.!<>\s])', r'\1\2', tO.text) Removes Duplicate Trailing
+    tO.text = re.sub(r'([…]){1}\1+', r'\1', tO.text)
+    tO.text = re.sub(r'([!！]){1}\1+', r'\1', tO.text)
+    tO.text = tO.text.replace('…！', '！')
+    tO.text = re.sub(r'(…+)([^。])', r'\1 \2', tO.text)
+    tO.text = re.sub(r'(…+)(。)', r'\1 ', tO.text)
     tO.text = tO.text.strip()
 
     #1. Replace variables and translate. 
@@ -241,7 +288,7 @@ def filterVariables(tO):
             tO.text = tO.text.replace('<xid=\'' + str(i) + '\'>', var)
             i += 1
 
-        tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
+        #tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
         tO.filterVarCalled = 1
 
         return tO
@@ -252,14 +299,15 @@ def filterVariables(tO):
     return tO
 
 def searchCodes(page, list):
-    string = ""
     for i, list in enumerate(page['list']):
 
         #Event Code: 401 Show Text
+        string = ''
         if page['list'][i]['code'] == 401:
             string += list['parameters'][0]
             while(page['list'][i + 1]['code'] == 401):
-                string += ' '
+                if not page['list'][i + 1]['parameters'][0] == '':
+                    string += ' '
                 string += page['list'][i + 1]['parameters'][0]
                 page['list'][i + 1]['parameters'][0] = ''
                 i += 1
@@ -336,8 +384,16 @@ def checkLine(line):
     # Check if match in line
     if (re.search(pattern2, line) is not None):
 
+        # # Removes Small Tsu
+        # while(re.search(r'(.+)[っ]([\W\s])', line)):
+        #     line = re.sub(r'(.+)[っ]([\W\s])', r'\1\2', line)
+
+        # # Let Google handle sfx
         if (choice == '1'):
-            translatedLine = translate(line)
+        #     if(not re.search(r'([^\s\Wa-zA-Z0-9]{2,})(.*?\1)', line)):
+            translatedLine = translate(line, 0)
+        #     else:
+        #         translatedLine = translate(line, 1)
 
             #Replace backslashes due to regex  
             translatedLine = translatedLine.replace('\\', '\\\\')
@@ -345,7 +401,7 @@ def checkLine(line):
 
         else:
             logging.error('Choice Variable is an invalid value')
-                    
+                        
         return line
         
     # Skip Line
