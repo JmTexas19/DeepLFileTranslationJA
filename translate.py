@@ -87,7 +87,7 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        print(translate('コーデリアは、なにやら支度に時間がかかっている ようでございますね…。 様子を見に行ってまいります。<xid=0>[メイド長]', 0))
+        print(translate('びゅるっ\\i[15]　びゅるる\\i[15]　びゅるるるる\\i[15]', 0))
         quit()
         
     # Open File (Threads)
@@ -186,15 +186,8 @@ def translate(text, engine):
         tO.release()
 
         #Final QA
-        tO.text = tO.text.replace('[ ', '[')
-        tO.text = tO.text.replace(' ]', ']')
-        tO.text = tO.text.replace('( ', '(')
-        tO.text = tO.text.replace(' )', ')')
-        tO.text = tO.text.replace('< ', '<')
-        tO.text = tO.text.replace(' >', '>')
-        tO.text = tO.text.replace("' ]", "']")
-        tO.text = tO.text.replace(" '", "'")
-        tO.text = tO.text.replace('x id = ', 'xid=')
+        tO.text = re.sub(r"(.+) ([<>\[\]\(\)\'\"])", r'\1\2', tO.text)
+        tO.text = re.sub(r"([<>\[\]\(\)\'\"]) (.+)", r'\1\2', tO.text)
         tO.text = re.sub(r"\b%s\b" % 'wow', 'ah', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % ', my God', '', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'Oh my god', 'Ah', tO.text, flags=re.IGNORECASE)
@@ -210,10 +203,14 @@ def translate(text, engine):
         tO.text = re.sub(r"\b%s\b" % 'she is', 'they are', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'help me, man', 'help me... please...', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'Ouch', 'coming', tO.text, flags=re.IGNORECASE)
-        tO.text = re.sub(r'\b%s\b' % "I'm kind of tickled", 'I find it funny', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "I'm kinda tickled", 'I find it funny', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r'\b%s\b' % "huh", 'eh', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "dark ones", 'thick cum', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "っ", '', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "launched a pimple", 'came', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "nub", 'rub', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "pizzle", 'cum', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"(\W\W)I don't know+([,\.])", r'\1eh\2', tO.text)
-        
 
         #Formatting
         tO.text = re.sub(r'(.{12,})\1', r'\1', tO.text)  # Long repeating phrases
@@ -255,7 +252,7 @@ def filterVariables(tO):
     tO.text = tO.text.replace('&lt;', '<')
     tO.text = tO.text.replace('&gt;', '>')
     tO.text = tO.text.replace('゛', '" ')
-    tO.text = re.sub(r'(?<!\\)"', '', tO.text)
+    #tO.text = re.sub(r'(?<!\\)"', '', tO.text)
     tO.text = tO.text.replace('\u3000', ' ')
     #tO.text = re.sub(r'[…]+', '', tO.text)
     #tO.text = tO.text.replace('。', '. ')
@@ -266,8 +263,9 @@ def filterVariables(tO):
     tO.text = re.sub(r'([…]){1}\1+', r'\1', tO.text)
     tO.text = re.sub(r'([!！]){1}\1+', r'\1', tO.text)
     tO.text = tO.text.replace('…！', '！')
+    #tO.text = tO.text.replace('…。', '…')
+    #tO.text = tO.text.replace('…', '..。')
     tO.text = re.sub(r'(…+)([^。])', r'\1 \2', tO.text)
-    tO.text = re.sub(r'(…+)(。)', r'\1 ', tO.text)
     tO.text = tO.text.strip()
 
     #1. Replace variables and translate. 
@@ -275,17 +273,17 @@ def filterVariables(tO):
         tO.variableList = re.findall(pattern3, tO.text)
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, '<xid=\'' + str(i) + '\'>', 1)
+            tO.text = tO.text.replace(var, '<id\'' + str(i) + '\'>', 1)
             i += 1
 
         tO.filterVarCalled = 1
         return tO
 
     #2. Replace placeholders.
-    elif(re.search(r'\<xid=\'[0-9]\'\>+', tO.text)):
+    elif(re.search(r'\<id\'[0-9]\'\>+', tO.text)):
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace('<xid=\'' + str(i) + '\'>', var)
+            tO.text = tO.text.replace('<id\'' + str(i) + '\'>', var)
             i += 1
 
         #tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
