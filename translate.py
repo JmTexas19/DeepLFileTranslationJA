@@ -87,7 +87,7 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        print(translate('びゅるっ\\i[15]　びゅるる\\i[15]　びゅるるるる\\i[15]', 0))
+        print(translate('ぁ……っ、はぁ゛っ\\i[15]　ひぅ……ん゛っ\\i[15] （父上に見られちゃうかもしれないけど、 気持ちいい……っ\\i[15]） \\nw[ユーリ]', 0))
         quit()
         
     # Open File (Threads)
@@ -252,6 +252,8 @@ def filterVariables(tO):
     tO.text = tO.text.replace('&lt;', '<')
     tO.text = tO.text.replace('&gt;', '>')
     tO.text = tO.text.replace('゛', '" ')
+    tO.text = tO.text.replace('（', ' (')
+    tO.text = tO.text.replace('）', ') ')
     #tO.text = re.sub(r'(?<!\\)"', '', tO.text)
     tO.text = tO.text.replace('\u3000', ' ')
     #tO.text = re.sub(r'[…]+', '', tO.text)
@@ -271,9 +273,10 @@ def filterVariables(tO):
     #1. Replace variables and translate. 
     if(re.search(pattern3, tO.text) != None and tO.filterVarCalled == 0):
         tO.variableList = re.findall(pattern3, tO.text)
+        tO.variableList = list(set(tO.variableList))    # Removed duplicates in list
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace(var, '<id\'' + str(i) + '\'>', 1)
+            tO.text = tO.text.replace(var, '<id\'' + str(i) + '\'>')
             i += 1
 
         tO.filterVarCalled = 1
