@@ -36,7 +36,7 @@ http = urllib3.PoolManager()
 #Regex
 pattern1 = re.compile(r'((?:[^\\\"]|\\.)*?)[\"\'<>【】]') #Match ANY in quotes
 pattern2 = re.compile(r'([\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2600-\u26FF]+)') #Match ANY JA Text
-pattern3 = re.compile(r'[\\]+[a-z]+\[[0-9]+\]|[\\]+[a-z]+')
+pattern3 = re.compile(r'\\+[A-Za-z0-9[\]]+|//')
 #pattern3 = re.compile(r'[^\u3040-\u309F\u30A0-\u30FF\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A\u2E80-\u2FD5\uFF5F-\uFF9F\u31F0-\u31FF\u3220-\u3243\u3280-\u337F\uFF40-\uFF5E\u2190-\u21FF\u0080-\u00FF\u2150-\u218F\u25A0-\u25FF\u2000-\u206F\u0020\w\\,.!?、]+|[\\\"\']+') #Match ANY Symbol or Variable
 
 #Class to hold translation data
@@ -87,7 +87,7 @@ def main():
 
     #Single Translation
     if(choice == '2'):
-        print(translate('ぁ……っ、はぁ゛っ\\i[15]　ひぅ……ん゛っ\\i[15] （父上に見られちゃうかもしれないけど、 気持ちいい……っ\\i[15]） \\nw[ユーリ]', 0))
+        print(translate("\r//メッセージバックを黒く\r", 0))
         quit()
         
     # Open File (Threads)
@@ -128,6 +128,20 @@ def handle(filename):
                 json.dump(translatedData, outFile, ensure_ascii=False)
                 print('Translated: {0}'.format(filename))
 
+            # Scenario Files
+            elif 'Scenario' in filename:
+                translatedData = parseScenario(json.load(f))
+                json.dump(translatedData, outFile, ensure_ascii=False)
+                print('Translated: {0}'.format(filename))
+
+#Google Translate Function
+def getAllElementsAsString(driver):
+    elementList = driver.find_elements_by_xpath("//span[@class='Q4iAWc']")
+    text = ''
+    for element in elementList:
+        text += (element.get_attribute("innerHTML"))
+
+    return text
 
 #Create drivers for translation based on THREADS
 def createDrivers():
@@ -161,10 +175,11 @@ def translate(text, engine):
                 driver.get(url)
 
                 #Wait until translation is finished loading
-                match = WebDriverWait(driver, 20).until(lambda driver: 
+                match = WebDriverWait(driver, 10).until(lambda driver: 
                     re.search(r'^(?!\s*$).+', driver.find_element_by_id('target-dummydiv').get_attribute("innerHTML"))
                 )
                 tO.text = match.group()
+                tO.text = tO.text.strip()
                 tO.doOnce = 1
         
         #GOOGLE
@@ -175,10 +190,8 @@ def translate(text, engine):
             driver.get(url)
 
             #Wait until translation is finished loading
-            match = WebDriverWait(driver, 10).until(lambda driver: 
-                re.search(r'^(?!\s*$).+', driver.find_element_by_xpath("//span[@class='Q4iAWc']").get_attribute("innerHTML"))
-            )
-            tO.text = match.group()
+            match = WebDriverWait(driver, 10).until(lambda driver: getAllElementsAsString(driver))
+            tO.text = match
 
         #Clean
         tO = filterVariables(tO)
@@ -186,8 +199,6 @@ def translate(text, engine):
         tO.release()
 
         #Final QA
-        tO.text = re.sub(r"(.+) ([<>\[\]\(\)\'\"])", r'\1\2', tO.text)
-        tO.text = re.sub(r"([<>\[\]\(\)\'\"]) (.+)", r'\1\2', tO.text)
         tO.text = re.sub(r"\b%s\b" % 'wow', 'ah', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % ', my God', '', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'Oh my god', 'Ah', tO.text, flags=re.IGNORECASE)
@@ -198,7 +209,7 @@ def translate(text, engine):
         tO.text = re.sub(r"\b%s\b" % 'Gimme', 'guchu', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'sperming', 'milking', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'sperm', 'semen', tO.text, flags=re.IGNORECASE)
-        tO.text = re.sub(r"\b%s\b" % 'man parts', 'penis', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r"\b%s\b" % 'man parts', 'privates', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'he is', 'they are', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'she is', 'they are', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"\b%s\b" % 'help me, man', 'help me... please...', tO.text, flags=re.IGNORECASE)
@@ -210,6 +221,8 @@ def translate(text, engine):
         tO.text = re.sub(r'\b%s\b' % "launched a pimple", 'came', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r'\b%s\b' % "nub", 'rub', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r'\b%s\b' % "pizzle", 'cum', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "zako", 'weak', tO.text, flags=re.IGNORECASE)
+        tO.text = re.sub(r'\b%s\b' % "hips", 'ass', tO.text, flags=re.IGNORECASE)
         tO.text = re.sub(r"(\W\W)I don't know+([,\.])", r'\1eh\2', tO.text)
 
         #Formatting
@@ -252,8 +265,8 @@ def filterVariables(tO):
     tO.text = tO.text.replace('&lt;', '<')
     tO.text = tO.text.replace('&gt;', '>')
     tO.text = tO.text.replace('゛', '" ')
-    tO.text = tO.text.replace('（', ' (')
-    tO.text = tO.text.replace('）', ') ')
+    tO.text = tO.text.replace('（', '(')
+    tO.text = tO.text.replace('）', ')')
     #tO.text = re.sub(r'(?<!\\)"', '', tO.text)
     tO.text = tO.text.replace('\u3000', ' ')
     #tO.text = re.sub(r'[…]+', '', tO.text)
@@ -265,10 +278,13 @@ def filterVariables(tO):
     tO.text = re.sub(r'([…]){1}\1+', r'\1', tO.text)
     tO.text = re.sub(r'([!！]){1}\1+', r'\1', tO.text)
     tO.text = tO.text.replace('…！', '！')
-    #tO.text = tO.text.replace('…。', '…')
-    #tO.text = tO.text.replace('…', '..。')
+    #tO.text = tO.text.replace('…', '..')
     tO.text = re.sub(r'(…+)([^。])', r'\1 \2', tO.text)
-    tO.text = tO.text.strip()
+    tO.text = re.sub(r"(.+) ([>\]\)\'\"])", r'\1\2', tO.text)
+    tO.text = re.sub(r"([<\[\(\'\"]) (.+)", r'\1\2', tO.text)
+    tO.text = tO.text.replace('\r', r'\r')
+    #tO.text = tO.text.replace('\\', '\\\\')
+    #tO.text = tO.text.strip()
 
     #1. Replace variables and translate. 
     if(re.search(pattern3, tO.text) != None and tO.filterVarCalled == 0):
@@ -283,10 +299,11 @@ def filterVariables(tO):
         return tO
 
     #2. Replace placeholders.
-    elif(re.search(r'\<id\'[0-9]\'\>+', tO.text)):
+    elif(re.search(r'\<[Ii][Dd]\'[0-9]\'\>+', tO.text)):
         i = 0
         for var in tO.variableList:
-            tO.text = tO.text.replace('<id\'' + str(i) + '\'>', var)
+            var = var.replace('\\', '\\\\')
+            tO.text = re.sub("<id\'" + str(i) + "\'>", var, tO.text, flags=re.IGNORECASE)
             i += 1
 
         #tO.text = re.sub(r'(?<=[^\.])\.', '', tO.text)
@@ -307,8 +324,8 @@ def searchCodes(page, list):
         if page['list'][i]['code'] == 401:
             string += list['parameters'][0]
             while(page['list'][i + 1]['code'] == 401):
-                if not page['list'][i + 1]['parameters'][0] == '':
-                    string += ' '
+                # if not page['list'][i + 1]['parameters'][0] == '':
+                #     string += ' '      #Adds space beween strings
                 string += page['list'][i + 1]['parameters'][0]
                 page['list'][i + 1]['parameters'][0] = ''
                 i += 1
@@ -331,17 +348,57 @@ def searchCodes(page, list):
                     mapName = checkLine(mapName)
                     list['parameters'][0] = mapName.replace(' ', '\t')
 
-        #Event Code: 356 DTEXT
-        if (list['code'] == 356):
-            for DTEXT in (list['parameters']):
-                if (re.search(pattern2, DTEXT) is not None and 'D_TEXT' in DTEXT):
-                    DTEXT = DTEXT.replace('D_TEXT ', '')
-                    DTEXT = 'D_TEXT ' + checkLine(DTEXT)
-                    list['parameters'][0] = DTEXT
+        # #Event Code: 356 DTEXT
+        # if (list['code'] == 356):
+        #     for DTEXT in (list['parameters']):
+        #         if (re.search(pattern2, DTEXT) is not None and 'D_TEXT' in DTEXT):
+        #             DTEXT = DTEXT.replace('D_TEXT ', '')
+        #             DTEXT = 'D_TEXT ' + checkLine(DTEXT)
+        #             list['parameters'][0] = DTEXT
+
+def searchScenarioCodes(list):
+    for i in range(len(list)):
+
+        #Event Code: 401 Show Text
+        string = ''
+        if list[i]['code'] == 401:
+            topListEntry = i
+            string += list[i]['parameters'][0]
+            while(list[i + 1]['code'] == 401):
+                # if not page['list'][i + 1]['parameters'][0] == '':
+                #     string += ' '      #Adds space beween strings
+                string += list[i + 1]['parameters'][0]
+                list[i + 1]['parameters'][0] = ''
+                i += 1
+            list[topListEntry]['parameters'][0] = checkLine(string)
+            string = ''
+
+        #Event Code: 102 Show Choice
+        if (list[i]['code'] == 102):
+            for j in range(len(list[i]['parameters'])):
+                list[i]['parameters'][j] = checkLine(choice)
+        
+        # #Event Code: 108 Screen Text
+        # if (list['code'] == 108):
+        #     for mapName in (list['parameters']):
+        #         if('info:' in mapName):
+        #             mapName = mapName.replace('info:', '')
+        #             mapName = 'info:' + checkLine(mapName)
+        #             list['parameters'][0] = mapName.replace(' ', '\t')
+        #         else:
+        #             mapName = checkLine(mapName)
+        #             list['parameters'][0] = mapName.replace(' ', '\t')
+
+        # #Event Code: 356 DTEXT
+        # if (list['code'] == 356):
+        #     for DTEXT in (list['parameters']):
+        #         if (re.search(pattern2, DTEXT) is not None and 'D_TEXT' in DTEXT):
+        #             DTEXT = DTEXT.replace('D_TEXT ', '')
+        #             DTEXT = 'D_TEXT ' + checkLine(DTEXT)
+        #             list['parameters'][0] = DTEXT
 
 def parseMap(data):
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
-        # Search Events
         for event in data['events']:
             if event:
                 executor.submit(handleParseMap, event)                     
@@ -355,7 +412,6 @@ def handleParseMap(event):
     return page
 
 def parseCommonEvents(data):
-    # Search Events
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
         for page in data:
             if page:
@@ -380,21 +436,25 @@ def handleParseTroops(event):
             searchCodes(page, list)
     return page
 
+def parseScenario(data):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        for list in data:
+            if data[list]:
+                executor.submit(handleParseScenario, data[list])
+        return data
+
+def handleParseScenario(list):
+    searchScenarioCodes(list)
+    return list
+
 def checkLine(line):
 
     # Check if match in line
     if (re.search(pattern2, line) is not None):
 
-        # # Removes Small Tsu
-        # while(re.search(r'(.+)[っ]([\W\s])', line)):
-        #     line = re.sub(r'(.+)[っ]([\W\s])', r'\1\2', line)
-
         # # Let Google handle sfx
         if (choice == '1'):
-        #     if(not re.search(r'([^\s\Wa-zA-Z0-9]{2,})(.*?\1)', line)):
             translatedLine = translate(line, 0)
-        #     else:
-        #         translatedLine = translate(line, 1)
 
             #Replace backslashes due to regex  
             translatedLine = translatedLine.replace('\\', '\\\\')
